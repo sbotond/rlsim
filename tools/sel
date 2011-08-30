@@ -1,0 +1,119 @@
+#!/usr/bin/env python
+
+#
+# Script to sample expression levels.
+#
+
+# Import external modules:
+import      sys
+import      re
+import      argparse
+import      numpy       as      np
+from        Bio         import  SeqIO
+
+##
+## Globals:
+##
+
+VERBOSE_MODE    = False
+
+##
+## Method definitions:
+##
+
+class MyError(Exception):
+    """ Exception class """
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+def vmsg(msg):
+    """ Print verbose message """
+    if VERBOSE_MODE:
+        print >>sys.stderr, msg
+
+def parse_arguments():
+    """ Parse arguments and set verbose mode """
+    global VERBOSE_MODE
+    parser = argparse.ArgumentParser(description='Sample expression levels.')
+    parser.add_argument('input_fasta', metavar='input fasta file', type=str, nargs='?',default=None, help='Transcripts and expression levels in Fasta format.')
+    parser.add_argument('-v', action='store_true', default=True, help='Verbose mode.')
+    parser.add_argument('-t', action='store_true', default=True, help='Trim sequence names.')
+    parser.add_argument('-m', metavar='dist_param', type=str, default="flux|x0:10000, k:2, x1:100", help='Fragment size distribution.')
+    args            = parser.parse_args()
+    # Set verbose mode:
+    VERBOSE_MODE    = args.v
+    # Check method string:
+    m   = args.m.strip()
+    if m == "":
+        raise MyError("Invalid method string: %s" % args.m)
+    return args
+
+def get_input_fh(input_file):
+    """ Get input file handler """
+    if input_file is None:
+        return sys.stdin
+    else:
+        fh = open(input_file,"r")
+        return fh
+
+def get_input_iter(fh):
+    """ Get fasta iterator for input """
+    return SeqIO.parse(fh,'fasta')
+
+def slurp_sequences(args):
+    """ Store all input sequences as a list of tupples """
+    sequences = [ ]
+    fh      = get_input_fh(args.input_fasta)
+    siter   = get_input_iter(fh)   
+    for s in siter:
+        if args.t:
+            name = s.name.strip()
+        else:
+            name = s.name
+        sequences.append( (name,str(s.seq)) )
+    return sequences
+
+def sample_expr_levels(trs, meth_string):
+    """ Sample expression levels using a given method and parameters """
+    # Parse method string:
+    tmp  = meth_string.split('$')
+    if len(tmp) != 2:
+        raise MyError("Invalid method string: %s" % meth_string)
+    (method, pars) = tmp
+    if method == 'flux':
+        return sample_expr_flux(trs, pars)
+
+# The flux simulator method for sampling expression levels:
+def parse_params_flux(params):
+    p = { 'x0': None, 'k': None, 'x1': None}
+    pattern = '\s*,?\s*(\S+)\s* : \s*(\S+)\s*'
+    parser = re.compile(pattern, re.X)
+    # Iterate over parameters:
+    for m in parser.finditer(params):
+        g   = m.groups()
+        if not p.has_key(g[0]):
+            raise MyError("Invalid parameter: %s:%s" % g )
+        p[g[0]] = g[1]
+    # Check if no parameter is missing:
+    for (k, v) in p.iteritems():
+        if v == None:
+            raise MyError("Missing parameter: %s" % k)
+    return p
+def sample_expr_flux(trs, params):
+    p   = parse_params_flux(params)
+    print p
+    
+##
+## Main section:
+##
+
+# Parse command line arguments:
+args        = parse_arguments()
+
+# Load transcripts:
+transcripts = slurp_sequences( args )
+
+# Sample expression levels:
+levels      = sample_expr_levels(transcripts, args.m)

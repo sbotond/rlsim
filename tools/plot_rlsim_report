@@ -1,0 +1,149 @@
+#!/usr/bin/env python
+
+#
+# Script to plot rlsim reports.
+#
+
+import      argparse
+import      re
+from        matplotlib                      import  pyplot          as  plt
+from        collections                     import  defaultdict
+from        matplotlib.backends.backend_pdf import  PdfPages
+import      numpy                           as      np
+
+# Exception class:
+class MyError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+# Function for parsing command line arguments:
+def parse_arguments():
+    parser  = argparse.ArgumentParser(description='Plot rlsim report.')
+    parser.add_argument('input_file', metavar='input file', type=str, nargs='?',default='rlsim_report.tab', help='rlsim report file.')
+    args    = parser.parse_args()
+    return args
+
+# Class handling PDF output:
+class PDFReport:
+    def __init__(self, pdf):
+        self.pdf    = pdf
+        self.pages  = PdfPages(pdf)
+
+    def plot_hash_bar(self, x, y, fig):
+        plt.bar(x, y, width=0.1)
+
+    def plot_hash_line(self, x, y, fig):
+        plt.plot(x, y,'b-')
+
+    def plot_hash(self, h, title, xl, yl, vis):
+        # Create figure:
+        fig = plt.figure()
+        # Sort keys:
+        x = h.keys()
+        x.sort()
+        # Accumulate values:
+        y = [ ]
+        for key in x:
+            y.append(h[key]) 
+        # Call plotter methods:
+        if vis == "bar":
+            self.plot_hash_bar(x, y, fig)
+        elif vis == "line":
+            self.plot_hash_line(x, y, fig)
+        else:
+            raise MyError("Invalid visual!")
+        plt.title(title)
+        plt.xlabel(xl)
+        plt.ylabel(yl)
+        self.pages.savefig(fig)
+
+    def plot_panel(self, panel):
+        self.plot_hash(panel.h, panel.title, panel.xl, panel.yl, panel.vis)
+
+    def close(self):
+        self.pages.close()
+
+    def __del__(self):
+        self.close()
+
+
+# Class for a single report panel:
+class Panel:
+    def __init__(self):
+        self.title  = None
+        self.h      = { }
+        self.look   = None
+        self.xl     = None
+        self.yl     = None
+        self.vis    = None
+
+    def __repr__(self):
+        s   = "Title: %s x: %s y: %s vis: %s" % (self.title, self.xl, self.yl, self.vis)
+        return s
+
+# Parse file and yield report sections:
+def parse_into_sections(fh):
+    lines = [ ]
+    # Iterate over lines:
+    for line in fh:
+        # Remove all whitespace:
+        line    = line.strip()
+        # Skip empty lines:
+        if line == "":
+            continue
+        elif line.startswith('# Title: '):
+            # yield previous section:
+            if len(lines) > 0:
+                tmp = list(lines)
+                # Reset lines buffer:
+                lines = [ line ]
+                yield tmp
+            else:
+                lines.append(line)
+            
+        else:
+            # Add line to buffer:
+            lines.append(line)
+    yield lines
+
+# Parse title line:
+def parse_title(line):
+    return line.split('# Title: ')[1]
+
+# Parse legend line:
+def parse_legend(line):
+    dummy, xl, yl, vis = line.split("\t")
+    return (xl, yl, vis)
+        
+# Parse report and yield panels:
+def parse_report(infile):
+    fh      = open(infile, "r")
+    for section in parse_into_sections(fh):
+        panel       = Panel()
+        # Parse title:
+        panel.title = parse_title(section.pop(0)) 
+        # Parse legend line:
+        panel.xl, panel.yl, panel.vis = \
+        parse_legend(section.pop(0))
+        # Parse (x,y) points:
+        for line in section:
+            x, y = line.split("\t")
+            panel.h[float(x)] = float(y)
+        yield panel 
+
+##
+## main section:
+##
+       
+# Parse command line arguments:
+args    = parse_arguments()
+
+# Construct report object:
+report  = PDFReport(args.input_file + ".pdf")
+
+# Parse and plot report:
+for panel in parse_report(args.input_file):
+    report.plot_panel(panel)
+

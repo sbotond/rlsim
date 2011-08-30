@@ -1,0 +1,2 @@
+#!/bin/bash
+time python -m cProfile -o profiling.out ../../brp -n 500000 test_transcripts_full.fas > frags.fas

@@ -1,0 +1,4 @@
+#!/usr/bin/env Rscript
+cov<-read.table("coverage.tab")$V1
+pdf("coverage.pdf")
+plot(cov,type="h",col="blue")

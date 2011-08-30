@@ -1,0 +1,33 @@
+#!/bin/bash
+PRG=../../rlsim
+NR_FRAGS=25000
+PRF="ref"
+REF="ref.fas"
+RUNFILE="s_4_0066.runfile"
+
+rm -fr ./pickle
+# Generate fragments:
+$PRG -n $NR_FRAGS -d "1.0:(450,50,200,600)" $REF > frags.fas 
+#$PRG -e 1.0 -f "pre_prim:5000" -n $NR_FRAGS -b 0.0 -d "0.5:(500,50,400,600) + 0.5:(500,100,400,600)" $REF > frags.fas 
+#$PRG -e 1.0 -f "prim_jump" -n $NR_FRAGS -b 0.0 -d "1.0:(800,1,100,2000)" $REF > frags.fas 
+
+# Generate paired-end reads:
+cat frags.fas | simNGS -p paired -o fastq -O reads $RUNFILE 
+
+# Align reads:
+rm alns.bam
+bwa index ref.fas
+bwa aln ref.fas reads_end1.fq > end1.sai
+bwa aln ref.fas reads_end2.fq > end2.sai
+bwa sampe ref.fas end1.sai end2.sai reads_end1.fq reads_end2.fq > aln.sam
+
+# Turn into viewable BAM:
+samtools faidx ref.fas
+samtools view -b -S aln.sam > aln.bam
+samtools sort aln.bam alns
+samtools index alns.bam
+rm aln.sam aln.bam
+
+# Extract coverage:
+samtools mpileup -f ref.fas alns.bam | cut -f 4 > coverage.tab
+#./plot_coverage

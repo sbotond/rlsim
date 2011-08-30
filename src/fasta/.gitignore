@@ -1,0 +1,6 @@
+.Rhistory
+*.6
+*.a
+*.out
+_obj
+_testmain.go
