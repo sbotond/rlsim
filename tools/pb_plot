@@ -1,0 +1,380 @@
+#!/usr/bin/env python
+#
+# Copyright (C) 2013 EMBL - European Bioinformatics Institute
+#
+# This program is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General
+# Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE. See the GNU General Public License
+# for more details.
+#
+# Neither the institution name nor the name rlsim
+# can be used to endorse or promote products derived from
+# this software without prior written permission. For
+# written permission, please contact <sbotond@ebi.ac.uk>.
+
+# Products derived from this software may not be called
+# rlsim nor may rlsim appear in their
+# names without prior written permission of the developers.
+# You should have received a copy of the GNU General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
+VERSION="1.0"
+
+import      matplotlib
+matplotlib.use('Agg')
+import      sys
+import      HTSeq       as      ht
+import      numpy       as      np
+from        matplotlib  import  pyplot  as plt
+import      argparse
+from        Bio         import  SeqIO
+from        matplotlib.backends.backend_pdf import  PdfPages
+import      string
+import      warnings
+import      cPickle
+
+##
+## Functions and classes:
+##
+
+def parse_arguments():
+    """ Parse arguments """
+    global VERBOSE_MODE
+    parser = argparse.ArgumentParser(description='Visualise sequence biases around fragment start/end (version %s).' % VERSION)
+    parser.add_argument('input_file', metavar='input file', type=str, nargs='?',default=None,
+                   help='Aligned *paired end* reads in SAM format.')
+    parser.add_argument('-f', metavar='ref_fasta', type=str, default="", help='Reference sequences in fasta format.')
+    parser.add_argument('-r', metavar='report_file', type=str, default="pb_plot.pdf", help='Name of PDF report file.')
+    parser.add_argument('-w', metavar='winsize', type=int, default=10, help='Window size.')
+    parser.add_argument('-q', metavar='min_qual', type=int, default=10, help='Minimum mapping quality.')
+    parser.add_argument('-p', metavar='pickle_file', type=str, default="pb_plot.pk", help='Results pickle file.')
+    args            = parser.parse_args()
+
+    if args.f == "":
+        print >>sys.stderr, "No reference fasta given!"
+        sys.exit(1)
+
+    if args.input_file is None:
+        print >>sys.stderr, "No SAM file given!"
+        sys.exit(1)
+
+    return args
+
+class MyError(Exception):
+    """ Exception class """
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+class Report:
+    """ Class for plotting reports """
+    def __init__(self, pdf):
+        self.pdf    = pdf
+        self.pages  = PdfPages(pdf)
+
+    def plot_counts(self, counts, title):
+        fig = plt.figure()
+        for base in counts.iterkeys():
+            y   = counts[base]
+            x   = np.arange(1,len(y)+1) - np.ceil(len(y)/2.0)
+            plt.plot(x, y, linewidth=1.0,label=base)
+        for i in x:
+            plt.axvline(x=i,color="#CCCBD2")
+        plt.title(title)
+        plt.xlabel("Position")
+        plt.ylabel("Counts")
+        plt.legend()
+        self.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
+    def plot_array(self, y, title="", xlab="", ylab=""):
+        """ Visualise  array as a bar plot """
+        fig = plt.figure()
+        plt.bar(np.arange(len(y)),y,width=0.1)
+        plt.xlim(xmax=len(y))
+        plt.xlabel(xlab)
+        plt.ylabel(ylab)
+        plt.title(title)
+        self.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
+    def close(self):
+        self.pages.close()
+
+class Log:
+    """ Logging utility class """
+    def __init__(self, fname=None, level=0):
+        self.level = level
+        if fname is None:
+            self.fname  = "<sys.stderr>"
+            self.file   = sys.stderr
+        else:
+            self.file   = open(fname, "w")
+            self.fname  = fname
+
+    def close(self):
+        self.file.flush()
+        self.file.close()
+
+    def log(self, message):
+        if self.level < 0:
+            return
+        self.file.write("[%s] %s\n" % (time.strftime("%y-%m-%d %H:%M:%S"), message) )
+
+    def vlog(self, message):
+        if self.level < 1:
+            return
+        self.file.write("[%s] %s\n" % (time.strftime("%y-%m-%d %H:%M:%S"), message) )
+
+    def fatal(self, message):
+        self.file.write("[%s] %s\n" % (time.strftime("%y-%m-%d %H:%M:%S"), message) )
+        sys.exit(1)
+
+class Fasta:
+    """ Fasta parsing class """
+    def __init__(self, infile):
+        self.infile     = infile
+        self.in_fh      = open(infile, "r")
+        self.iter       = SeqIO.parse(self.in_fh,'fasta')
+
+    def __iter__(self):
+        """ Return iterator """
+        return iter(self.iter)
+
+    def slurp(self):
+        """ Slurp sequences """
+        records = { }
+        for s in iter(self):
+            records[s.name] = (str(s.seq)).upper()
+        return records
+
+# Functions to turn sequences into logic vectors:
+def is_A(c):
+    if c == 'A':
+        return 1
+    return 0
+is_A_v = np.vectorize(is_A,otypes='')
+
+def is_T(c):
+    if c == 'T':
+        return 1
+    return 0
+is_T_v = np.vectorize(is_T,otypes='')
+
+def is_G(c):
+    if c == 'G':
+        return 1
+    return 0
+is_G_v = np.vectorize(is_G,otypes='')
+
+def is_C(c):
+    if c == 'C':
+        return 1
+    return 0
+is_C_v = np.vectorize(is_C,otypes='')
+
+class NumRef:
+    def __init__(self, ref_seq):
+        self.num_ref = { }
+        for name, seq in ref_seq.iteritems():
+             self.num_ref[name] = self.seq_to_num(seq)
+
+    def seq_to_num(self, s):
+        nr          = { }
+        nr['A']     = is_A_v(list(s)) 
+        nr['T']     = is_T_v(list(s)) 
+        nr['G']     = is_G_v(list(s)) 
+        nr['C']     = is_C_v(list(s)) 
+        return nr
+ 
+class FragContext:
+    """ Class representing a fragment """
+    def __init__(self, num_ref, chrom, start, end, strand):
+        self.num_ref    =   num_ref
+        self.chrom      =   chrom
+        self.start      =   start
+        self.end        =   end
+        self.size       =   end - start
+        self.strand     =   strand
+
+    def __str__(self):
+        return ">%s %d -- %d %s (%d)\n%s ... %s\n" % (self.chrom, self.start, self.end, self.strand, self.size, self.start_context(2), self.end_context(2))
+
+    def get_context(self, base, direction, w):
+        pos = None
+        if direction == "start":
+            pos = self.start
+        elif direction == "end":
+            pos = self.end
+        else:
+            print >>sys.stderr, "Invalid direction"
+        num_str = self.num_ref[self.chrom][base]
+       
+        start   = pos - w
+        end     = pos + w + 1
+
+        # Reject fragments overlapping the end points:
+        if start < 0: 
+            return None
+        if end > len(num_str):
+            return None
+        return num_str[start:end]
+
+    def get_gc_content(self):
+        s, e    = self.start, self.end
+        gc      = np.sum(self.num_ref[self.chrom]['G'][s:e])
+        gc      += np.sum(self.num_ref[self.chrom]['C'][s:e])
+        return int( float(gc)/(e - s) * 100 )
+
+class BaseCounter:
+    def __init__(self, wsize):
+        self.wsize  = wsize
+        self.ds     = -wsize
+        self.de     = wsize+1
+        self.len    = self.de - self.ds
+        self.nucs   = ['A', 'T', 'G', 'C']
+        self.counts_start   = { }
+        self.counts_end     = { }
+        self.gc             = np.zeros((101), dtype=float)
+        for i in self.nucs:
+            self.counts_start[i] = np.zeros((self.len), dtype=int)        
+            self.counts_end[i] = np.zeros((self.len), dtype=int)        
+
+    def count_bases(self, fc):
+        for base in self.nucs:
+           tmp = fc.get_context(base, "start", self.wsize) 
+           if not tmp is None:
+               self.counts_start[base] += tmp
+           tmp = fc.get_context(base, "end", self.wsize) 
+           if not tmp is None:
+               self.counts_end[base] += tmp
+
+    def register_gc(self, fc):
+        self.gc[fc.get_gc_content()] += 1
+
+    def norm_gc(self):
+        self.gc = self.gc/np.sum(self.gc) 
+
+    def pickle_counts(self, fname):
+        tmp = {
+            'counts_start': self.counts_start,
+            'counts_end': self.counts_end,
+            'gc_content': self.gc
+        }
+        fh     = open(fname, "w")
+        pickle = cPickle.Pickler( fh )
+        pickle.dump(tmp)
+        fh.flush()
+        fh.close()
+
+
+class ParseFrags:
+    """ Parse fragments """
+    def __init__(self, infile, num_ref, min_qual, log, report):
+        self.infile     =   infile
+        self.min_qual   =   min_qual
+        self.log        =   log
+        self.report     =   report
+        self.num_ref    =   num_ref
+        self.read_iter  =   self.open_iter()
+
+    def open_iter(self):
+        if self.infile == "-":
+            self.infile = ht.FileOrSequence(sys.stdin)
+        return ht.SAM_Reader(self.infile)
+
+    def next_pair(self):
+        """ Get next read pair """
+        for (first, second) in ht.pair_SAM_alignments(self.read_iter):
+            yield (first, second)
+
+    def iter_frag_contexts(self):
+        """ Get next fragment """
+        self.open_iter()
+        min_qual    = self.min_qual
+        for pair in self.next_pair():
+            # Missing mate:
+            if (pair[0] == None) or (pair[1] == None):
+                continue
+            # Unpaired read:
+            elif (not pair[0].paired_end ) or (not pair[1].paired_end):
+                self.log.fatal("Unpaired read found in alignment!")
+            # Not a proper pair:
+            elif (not pair[0].proper_pair ) or (not pair[1].proper_pair):
+                continue
+            # One of the reads is not aligned:
+            elif (not pair[0].aligned ) or (not pair[1].aligned):
+                continue
+            elif (not pair[0].proper_pair ) or (not pair[1].proper_pair):
+                continue
+            # Mismatching reference:
+            elif pair[0].iv.chrom != pair[1].iv.chrom:
+                continue
+            # One of the reads has low mapping quality:
+            elif pair[0].aQual < min_qual or pair[1].aQual < min_qual:
+                continue
+
+            # Pull out useful info:
+            chrom           =   pair[0].iv.chrom
+            start, end      =   None, None
+            strand          =   "+"
+
+            # First read maps downstream:
+            if  pair[0].iv.start < pair[1].iv.start:
+                start       =   pair[0].iv.start
+                end         =   pair[1].iv.end
+            else:
+            # First read maps upstream:
+                strand      =   "-"
+                start       =   pair[1].iv.start
+                end         =   pair[0].iv.end
+
+            # Get fragment sequence:
+            yield FragContext(self.num_ref, chrom, start, end, strand)
+
+##
+## Main section:
+##
+
+args    = parse_arguments()
+L       = Log()
+R       = Report(args.r)
+
+# Slurp reference sequences:
+num_ref = NumRef( Fasta(args.f).slurp() )
+
+fp      = ParseFrags(args.input_file, num_ref.num_ref, args.q, L, R)
+
+bc      = BaseCounter(args.w)
+
+# Catch and supress HTSeq warnings: 
+original_filters = warnings.filters[:]
+warnings.simplefilter("ignore")
+# Iterate over fragment contexts:
+try:
+    for fc in fp.iter_frag_contexts():
+        bc.count_bases(fc)
+        bc.register_gc(fc)
+finally:
+        # Restore the list of warning filters.
+        warnings.filters = original_filters
+
+bc.norm_gc()
+
+bc.pickle_counts(args.p)
+
+R.plot_counts(bc.counts_start,"Bases around fragment start") 
+R.plot_counts(bc.counts_end,"Bases around fragment end") 
+R.plot_array(bc.gc,title="Fragment GC content", xlab="GC content", ylab="Frequency")
+R.close()

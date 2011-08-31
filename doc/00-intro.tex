@@ -1,0 +1,336 @@
+\section{Introduction}
+\label{s:intro}
+
+\subsection{What is the \rlsim package?}
+\label{ss:abstract}
+
+The \rlsim package is a collection of tools for simulating RNA-seq library construction, aiming to reproduce the most important factors which are known to introduce significant biases in the currently used protocols: hexamer priming \cite{hansen10}, PCR amplification \cite{dohm08,benjamini12} and size selection \cite{lee11}. It allows for a systematic exploration of the effects of the individual biasing factors and their interactions on downstream applications by simulating data under a variety of parameter sets. 
+
+The implicit simulation model implemented in the main tool ({\tt rlsim}) is inspired by the actual library preparation protocols and it is more general than the models used by the bias correction methods (e.g. \cite{li10}, \cite{jones12}), hence it allows for a fair assessment of their performance.
+
+Although the simulation model was kept as simple as possible in order to aid usability, it still has too many parameters to be inferred from data produced by standard RNA-seq experiments. However, simulating datasets with properties similar to specific datasets is often useful. To address this, the package provides a tool ({\tt effest}) implementing simple approaches for estimating the parameters which can be recovered from standard RNA-seq data (GC-dependent amplification efficiencies, fragment size distribution, relative expression levels).
+
+The key features offered by the package are the following:
+
+\begin{itemize}
+\item{Simulation of priming biases loosely based on a nearest-neighbor thermodynamic model.}
+\item{Exact simulation of PCR amplification on the level of individual fragments (consistent across expression levels, no approximations).}
+\item{Fragment-specific amplification efficiencies determined by GC-content and length.}
+\item{Possibility to simulate PCR and sampling pseudo-replicates.}
+\item{Simulation of size selection and polyadenylation with flexible target distributions.}
+\item{Estimation of GC-dependent amplification efficiencies from real data, relying on assumptions about locality of biases and the mean efficiency of the fragment pool.}
+\item{Estimation of relative expression levels.}
+\item{Estimation of empirical fragment size distribution, model selection between normal vs. skew normal distributions.}
+\item{Able to simulate experiments on the human transcriptome over a wide range of expression levels on a desktop machine.}
+\end{itemize}
+
+The \rlsim package does not simulate the exact physical and chemical processes which take place during library construction, as such a simulation model would involve too many hidden parameters with not enough information in the data about their possible values. 
+
+\subsection{Citing the package}
+\label{ss:citing}
+
+An associated manuscript is in preparation, meanwhile the package should be cited as:
+
+\begin{itemize}
+\item[]{{Botond Sipos, Tim Massingham and Nick Goldman (2013): {\it \texttt{\rlsim} -- a package for simulating RNA-seq library preparation with parameter estimation} [\href{http://bit.ly/rlsim-doc}{http://bit.ly/rlsim-doc}].}}
+
+\end{itemize}
+
+\subsection{Getting more help}
+\label{ss:more_help}
+
+The {\tt BioStar} Q\&A forum (\href{http://www.biostars.org}{\tt http://www.biostars.org}) is an excellent place to get additional help. The author of the package will monitor the posts having the \texttt{rlsim} tag.
+
+\subsection{Dependencies and installation}
+\label{ss:dep_install}
+
+\subsubsection{Dependencies}
+\label{sss:dep}
+
+The package runs on 64-bit GNU/Linux operating systems.
+The \rlsim tool is written in \go \cite{golang} and shipped as a statically linked executable for the \texttt{amd64} Linux platforms, hence it has no dependencies.
+
+\warn{The \rlsim tool can be built for other architectures supported by the \go compiler, however only the \texttt{amd64} architecture is supported and the 32-bit binaries might not work properly.}
+
+The parameter estimation tool (\texttt{effest}) and the additional tools are written in \texttt{Python 2.x} and depend on a couple of packages:
+
+\begin{itemize}
+\item \texttt{numpy >= 1.6.2} \cite{numpy}
+\item \texttt{matplotlib >= 1.1.0} \cite{plt}
+\item \texttt{scipy >= 0.10.1} \cite{scipy}
+\item \texttt{biopython >= 1.60} \cite{biopython}
+\item{A modified version of the \texttt{HTSeq} \cite{htseq} package available from the GitHub repository under\\
+\texttt{\href{https://github.com/sbotond/rlsim/tree/master/misc}{https://github.com/sbotond/rlsim/tree/master/misc}}.
+
+\warn{The official releases of the HTSeq package contain a bug causing segmenation fault when parsing certain paired-end datasets. Please use the modified version from the \rlsim repository!}
+}
+\end{itemize}
+
+These packages (with the exception of the modified HTSeq) are readily installable from the \texttt{Python} Package Index \cite{pypi} using the \texttt{pip} tool by issuing the following command:
+
+\begin{verbatim}
+pip install numpy matplotlib scipy biopython
+\end{verbatim}
+
+The additional tool \plotCov tools depend on {\tt samtools} \cite{samtools}.
+Simulating Illumina sequencing of the fragments can be done by using the {\tt simNGS} package \cite{simngs} (recommended) or any other sequencing simulator.
+
+\subsubsection{Installing the latest release}
+\label{sss:release_inst}
+
+The release tarballs can be obtained from the \rlsim download \cite{rlsim_down} page on \texttt{GitHub}:
+
+\begin{verbatim}
+wget https://github.com/sbotond/phylosim/releases/rlsim-latest.tar.gz
+\end{verbatim}
+
+The unpacked release directory contains the following files:
+
+\begin{itemize}
+    \item{{\tt bin/} -- directory containing the executables:
+        \begin{itemize}
+            \item[]{\rlsim -- the main tool simulating library construction}
+            \item[]{\effest -- tool for estimating selected parameters from real datasets}
+            \item[]{\sel -- tool for sampling expression levels}
+            \item[]{\plotRlsim -- tool for plotting the \rlsim report}
+            \item[]{\pbPlot -- tool for visualising sequence biases}
+            \item[]{\covCmp -- tool for comparing coverage trends across datasets}
+            \item[]{\plotCov -- tool for plotting transcript read coverage colored by reference base}
+        \end{itemize}
+    }
+    \item {\tt COPYING} -- GPL v3 licence
+    \item {\tt README.md} -- short instructions in markdown format
+    \item {\tt rlsim\_manual.pdf} -- package manual
+\end{itemize}
+
+The executables under \texttt{bin/} can be installed by copying them to a directory listed in the \texttt{\$PATH} environmental variable.
+
+
+\subsubsection{Building from source}
+\label{sss:build}
+
+Build dependencies:
+
+\begin{itemize}
+\item The package is built using \texttt{make} in a standard \texttt{Linux} environment. 
+\item Building the \rlsim tool requires the \go compiler which can be installed as described on the projects website \cite{goinstall}. 
+\item A standard \LaTeX\ installation with \texttt{pdflatex} has to be present in order to produce the package documentation. 
+\item Regenerating the test datasets needs the {\tt bwa} \cite{bwa} and {\tt samtools} \cite{samtools} commands to be installed.
+\end{itemize}
+
+The package source can be obtained by cloning the \texttt{GitHub} repository \cite{rlsim_repo} and built by issuing \texttt{make} in the top level directory:
+
+\begin{verbatim}
+git clone https://github.com/sbotond/rlsim.git
+cd rlsim
+make
+\end{verbatim}
+
+A tarball can be built by issuing:
+
+\begin{verbatim}
+make release
+\end{verbatim}
+
+\subsection{Examples}
+\label{ss:examples}
+
+The following basic examples can be run from the \texttt{src/} directory in the package source tree:
+
+\begin{itemize}
+\item{Re-sample expression levels from a mixture of gamma distributions with two components with mean 5,000 and 10,000:
+
+\begin{verbatim}
+$ ../tools/sel -d "0.5:g:(5000, 0.1) + 0.5:g:(10000, 100)" \
+test/basic/test_transcripts.fas > my_transcripts.fas
+\end{verbatim}
+
+The output {\tt my\_transcripts.fas} is a Fasta file annotated with the expression levels:
+
+\begin{verbatim}
+>ENST00000371588$9430
+GCTTCCGGCATCTGGCTCAGTTCCGCCATGGCCTCCTTGGAAGTCAGTCGTAGTCCTCGCAGGTCTCGGCGGGAGCTG ...
+...
+\end{verbatim}
+
+}
+\item{Simulate 10,000 fragments with default parameters, plot \rlsim report:
+
+\begin{verbatim}
+$ ./rlsim -n 10000 my_transcripts.fas > frags.fas
+$ ../tools/plot_rlsim_report
+\end{verbatim}
+
+The output file {\tt frags.fas} contains the simulated fragments:
+
+\begin{verbatim}
+>Frag_0 ENST00000374005 (Strand - Offset 1883 -- 2298)
+AGAGAATAGAGGGTAGAAGGGAAATTCTTGGCACCTGGACTAGAGTGAGATAAAAGGAGAGTAGGAAAGCAGTGA ...
+...
+\end{verbatim}
+
+}
+\item{Simulate paired-end sequencing using {\tt simNGS} \cite{simngs} and the runfile shipped with the package source:
+
+\begin{verbatim}
+$ cat frags.fas | simNGS -p paired -o fastq -O reads test/cov/s_4_0066.runfile
+\end{verbatim}
+
+The files {\tt reads\_end1.fq} and {\tt reads\_end1.fq} contain the simulated paired-end reads:
+
+\begin{verbatim}
+@Frag_24929 refB (Strand - Offset 11583 -- 12067) 151M
+GCCCCGAGTAGTTCTGGGCGGGGCCCCCGCGGCCAGCGCCGCCCACTATATATTATTTATTCTAACTATT ...
++
+GGGEFG(EGFGGDGBFEGGG;FD7GEGGDGGA=GGGDG7FFGGGGGFGCAGGGGGFF?GGGFG@GGAGGG ...
+...
+\end{verbatim}
+
+}
+
+\item{Simulate 500,000 fragments, skew normal fragment size distribution with a spike, {\tt after\_prim\_double} fragmentation method, 15 PCR cycles with the specified efficiency parameters, using 4 cores, verbose mode:
+
+\begin{verbatim}
+$ ./rlsim -n 50000 -d "0.9:sn:(600,50,4,300,2000) + 0.1:n:(700,1,600,2000)" \
+-f after_prim_double -c 15 -eg "(1.0,0.5,0.8)" -el "(0.1,0.7,1.0)" \
+-t 4 -v my_transcripts.fas > frags.fas
+
+10:09:14.327740 Starting up rlsim using maximum 4 cores.
+10:09:14.327809 Initial random seed: 1352196554
+10:09:14.328244 Number of requested fragments: 50000
+10:09:14.328250 Target fragment length distribution components:
+10:09:14.328275         0.10:n:(700, 1, 600, 2000)
+10:09:14.328280         0.90:sn:(600, 50, 4, 300, 2000)
+10:09:14.369978 Finished sampling target lengths.
+10:09:14.370402 Fragmentation method: "after_prim_double" with parameter 0.
+10:09:14.370564 Number of PCR cycles: 15
+10:09:14.370593 GC dependent efficiency parameters: (1,0.5,0.8)
+10:09:14.370613 Length dependent efficiency parameters: (0.1,0.7,1)
+10:09:14.378443 Poly(A) tail distribution components:
+10:09:14.378484         1.00:g:(150, 1, 0, 220)
+10:09:14.378501 Fragments will be cached to rlsim_gob_5704.
+10:09:14.378504 Fragmenting transcripts and amplifying fragments:
+10:09:14.381961         0       ENST00000371588$855
+10:09:14.393732         1       ENST00000367772$981
+10:09:14.425730         2       ENST00000359326$0
+10:09:14.425893         3       ENST00000374005$9899
+10:09:14.629702         4       ENST00000002165$8381
+10:09:14.736127 Initialized 4 transcripts.
+10:09:15.474069 Total number of fragments in the pool: 7.29577e+06
+10:09:15.474144 Sampling ratio: 0.0068532862192750045
+10:09:15.474193 Sampled 50000 fragments.
+10:09:15.474211 Missing fragments: 0
+
+$ ../tools/plot_rlsim_report
+\end{verbatim}
+
+}
+\item{Estimate parameters from SAM file \red{sorted by read name} using \effest (verbose mode):
+
+\begin{verbatim}
+$ ../tools/effest -v -f ../tools/test/ref.fas ../tools/test/aln1.sam 
+
+[12-11-06 10:10:19] Assumed mean efficiency: 0.87
+[12-11-06 10:10:19] Number of PCR cycles: 11
+[12-11-06 10:10:19] Sliding window step ratio: 10
+[12-11-06 10:10:19] Minimum mapping quality: 10
+[12-11-06 10:10:19] Saving estimated raw parameters to file: raw_params.json
+[12-11-06 10:10:19] Parsing fragments from file: ../tools/test/aln1.sam
+[12-11-06 10:10:22] Total number of fragments: 47142
+[12-11-06 10:10:22] Total number of fragments from single isoform genes: 47142
+[12-11-06 10:10:32] Saving fragment counts to file: effest_counts.pk
+[12-11-06 10:10:32] Calculating fragment prior
+[12-11-06 10:10:41] Saving fragment prior to file: effest_pr.pk
+[12-11-06 10:10:41] Estimated minimum efficiency: 0.513163
+[12-11-06 10:10:41] Estimated shape parameter: 5.57905
+[12-11-06 10:10:43] Saving estimated expression levels to file: _expr.fas
+[12-11-06 10:10:43] Estimating fragment size distribution (truncated normal)
+[12-11-06 10:10:43] Estimated mean fragment length: 464
+[12-11-06 10:10:43] Estimated fragment length standard deviation: 87
+[12-11-06 10:10:44] Truncated normal AIC: 553765
+[12-11-06 10:10:44] Estimating fragment size distribution (skew normal)
+[12-11-06 10:10:44] Estimated location parameter: 364
+[12-11-06 10:10:44] Estimated scale parameter: 132
+[12-11-06 10:10:44] Estimated shape parameter: 2.7782
+[12-11-06 10:10:45] Skew normal AIC: 552143
+[12-11-06 10:10:45] Absolute AIC difference: 1621.73
+
+Suggested rlsim parameters:
+        -d "1.0:sn:(364, 132, 2.7782, 229, 868)"
+        -eg "(5.57905, 0.513163, 1)"
+        -n 47142
+
+\end{verbatim}
+}
+
+\item{Estimate parameters from SAM file \red{sorted by read name} using \effest -- assume 15 PCR cycles and a pool efficiency of 0.9:
+\begin{verbatim}
+$ ../tools/effest -v -c 15 -m 0.9 -f ../tools/test/ref.fas ../tools/test/aln1.sam 
+
+[12-11-06 10:12:14] Assumed mean efficiency: 0.9
+[12-11-06 10:12:14] Number of PCR cycles: 15
+[12-11-06 10:12:14] Sliding window step ratio: 10
+[12-11-06 10:12:14] Minimum mapping quality: 10
+[12-11-06 10:12:14] Saving estimated raw parameters to file: raw_params.json
+[12-11-06 10:12:14] Parsing fragments from file: ../tools/test/aln1.sam
+[12-11-06 10:12:17] Total number of fragments: 47142
+[12-11-06 10:12:17] Total number of fragments from single isoform genes: 47142
+[12-11-06 10:12:26] Saving fragment counts to file: effest_counts.pk
+[12-11-06 10:12:26] Calculating fragment prior
+[12-11-06 10:12:35] Saving fragment prior to file: effest_pr.pk
+[12-11-06 10:12:35] Estimated minimum efficiency: 0.626195
+[12-11-06 10:12:35] Estimated shape parameter: 5.61645
+[12-11-06 10:12:37] Saving estimated expression levels to file: _expr.fas
+[12-11-06 10:12:37] Estimating fragment size distribution (truncated normal)
+[12-11-06 10:12:37] Estimated mean fragment length: 464
+[12-11-06 10:12:37] Estimated fragment length standard deviation: 87
+[12-11-06 10:12:38] Truncated normal AIC: 553765
+[12-11-06 10:12:38] Estimating fragment size distribution (skew normal)
+[12-11-06 10:12:38] Estimated location parameter: 364
+[12-11-06 10:12:38] Estimated scale parameter: 132
+[12-11-06 10:12:38] Estimated shape parameter: 2.7782
+[12-11-06 10:12:39] Skew normal AIC: 552143
+[12-11-06 10:12:39] Absolute AIC difference: 1621.73
+
+Suggested rlsim parameters:
+        -d "1.0:sn:(364, 132, 2.7782, 229, 868)"
+        -eg "(5.61645, 0.626195, 1)"
+        -n 47142
+
+\end{verbatim}
+}
+
+\item{Simulate 20,000 fragments using the raw parameters estimated by \effest, set minimum GC-dependent efficiency to 0.5 (verbose mode):
+
+\begin{verbatim}
+$ ./rlsim -v -n 20000 -j raw_params.json -jm 0.5 my_transcripts.fas > frags.fas
+
+10:13:50.240213 Starting up rlsim using maximum 4 cores.
+10:13:50.240353 Initial random seed: 1352196830
+10:13:50.240887 Using raw parameter file: raw_params.json
+10:13:50.241033 Number of requested fragments: 20000
+10:13:50.314449 Finished sampling target lengths from raw size distribution.
+10:13:50.314969 Fragmentation method: "after_prim_double" with parameter 0.
+10:13:50.315094 Number of PCR cycles: 15
+10:13:50.315114 Using raw GC efficiencies with a minimum efficiency: 0.5
+10:13:50.315956 Poly(A) tail distribution components:
+10:13:50.316001         1.00:g:(150, 1, 0, 220)
+10:13:50.316043 Fragments will be cached to rlsim_gob_5760.
+10:13:50.316058 Fragmenting transcripts and amplifying fragments:
+10:13:50.317036         0       ENST00000371588$855
+10:13:50.328412         1       ENST00000367772$981
+10:13:50.359313         2       ENST00000359326$0
+10:13:50.359447         3       ENST00000374005$9899
+10:13:50.561491         4       ENST00000002165$8381
+10:13:50.672723 Initialized 4 transcripts.
+10:13:50.987213 Total number of fragments in the pool: 1.28970086e+08
+10:13:50.987261 Sampling ratio: 0.00015507472019519317
+10:13:50.987331 Sampled 20000 fragments.
+10:13:50.987386 Missing fragments: 0
+
+$ ../tools/plot_rlsim_report
+\end{verbatim}
+
+}
+\end{itemize}
+

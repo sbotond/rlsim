@@ -1,0 +1,104 @@
+#
+# Copyright (C) 2013 EMBL - European Bioinformatics Institute
+#
+# This program is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General
+# Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE. See the GNU General Public License
+# for more details.
+#
+# Neither the institution name nor the name rlsim
+# can be used to endorse or promote products derived from
+# this software without prior written permission. For
+# written permission, please contact <sbotond@ebi.ac.uk>.
+#
+# Products derived from this software may not be called
+# rlsim nor may rlsim appear in their
+# names without prior written permission of the developers.
+# You should have received a copy of the GNU General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
+# Parse arguments
+arg    =   parse_arguments()
+
+# Initialize logging:
+log_level   = 1 if arg.v else 0
+L           = Log(arg.l, log_level)
+
+# Report important arguments:
+log_arguments(arg, L)
+
+# Initialize report:
+R       = Report(arg.r)
+
+# Load reference:
+ref_seq = None
+if arg.f != None:
+    ref_seq = Fasta(arg.f).slurp()
+
+# Load list of single isoform genes:
+SI  = SingleIsoList(arg.i, L)
+
+# Load fragments:
+frags       = None
+unpickle    = FragUnpickle(arg.k, L, R)
+frags       = unpickle.load()
+
+# Parse input:
+if frags == None:
+    parser  = ParseFrags(arg.input_file, SI, ref_seq, arg.q, L, R)
+    frags   = parser.parse_frags()
+
+# Plot sample properties:
+frags.plot_report()
+
+# Pickle fragments:
+if arg.k is None:
+    pickle  = FragPickle(arg.s, L) 
+    pickle.save(frags)
+
+# Load fragment prior:
+frag_prior  = None
+unpickle    = PriorUnpickle(arg.o, L, R)
+frag_prior  = unpickle.load()
+
+# Calculate fragment prior:
+if frag_prior == None:
+    frag_prior   = FragPrior(frags, SI, ref_seq, arg.w, L, R)
+
+# Pickle fragment prior:
+pickle  = PriorPickle(arg.p, L) 
+pickle.save(frag_prior)
+
+# Fit efficiency model:
+eff_model_gc = EffModelGC(frags, frag_prior, arg.c, arg.m, arg.M, init_params=np.array([0.5,0.5]), log=L, report=R)
+L.vlog("Estimated minimum efficiency: %g" % eff_model_gc.fitted_params[1])
+L.vlog("Estimated shape parameter: %g" % eff_model_gc.fitted_params[0])
+
+# Estimate expression levels:
+el = EstLevels(ref_seq, frags, arg.c, eff_model_gc, arg.g, arg.e, arg.f, arg.t, arg.a, L, R)
+el.save_seq()
+
+# Fit fragment size distribution:
+fit_fragdist(frags, arg.d, L, R)
+
+# Report suggested GC effciency string:
+eff_model_gc.suggest_params()
+
+# Save raw parameters:
+rj  = SaveEmp(arg.j)
+frags.save_raw(rj)
+eff_model_gc.save_raw(rj)
+rj.save_objs()
+
+# Suggest fragment number:
+print "\t-n %d" % frags.all_frags()
+R.close()
+

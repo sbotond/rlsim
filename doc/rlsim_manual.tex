@@ -1,0 +1,78 @@
+%%
+%% rlsim manual
+%%
+
+% This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 Unported License: http://creativecommons.org/licenses/by-sa/3.0/
+
+% Declare documentclass and font size:
+\documentclass[a4paper, twosided]{article}
+\pdfoutput=1
+
+% Add paragraphs to toc:
+\setcounter{tocdepth}{4}
+
+% Break lines after paragraph:
+\makeatletter
+\renewcommand\paragraph{\@startsection{paragraph}{4}{\z@}%
+  {-3.25ex\@plus -1ex \@minus -.2ex}%
+  {1.5ex \@plus .2ex}%
+  {\normalfont\normalsize\bfseries}}
+\makeatother
+
+% Font settings:
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{listings}
+\usepackage{verbatim}
+\usepackage{graphicx}
+
+% Set URL color:
+\usepackage[usenames,dvipsnames]{xcolor}
+
+% Strech page:
+\usepackage{fullpage}
+% Use new include to get rid of extra spaces:
+\usepackage{newclude}
+
+% Get more configurable tabular and itemize:
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage[colorlinks=false,pdfborder={0 0 0}]{hyperref}
+
+% Useful commands:
+\newcommand{\rlsim}{\texttt{rlsim} }
+\newcommand{\effest}{\texttt{effest} }
+\newcommand{\pbPlot}{\texttt{pb\_plot} }
+\newcommand{\plotRlsim}{\texttt{plot\_rlsim\_report} }
+\newcommand{\covCmp}{\texttt{cov\_cmp} }
+\newcommand{\plotCov}{\texttt{plot\_cov} }
+\newcommand{\sel}{\texttt{sel} }
+\newcommand{\go}{\texttt{Go} }
+\newcommand{\red}[1]{{\color{red} #1}}
+\newcommand{\warn}[1]{{\red{WARNING: #1}}}
+\newcommand{\ttt}[1]{{\tt #1}}
+
+% Specify title and author:
+\title{\rlsim -- a package for simulating RNA-seq library preparation with parameter estimation}
+\author{Botond Sipos\\ \\{\tt sbotond@ebi.ac.uk}\\{\tt \href{http://sbotond.github.com}{http://sbotond.github.com}}}
+
+\begin{document}
+
+\maketitle
+\begin{center}
+\href{http://creativecommons.org/licenses/by-sa/3.0/}{\includegraphics[scale=0.45]{pix/cc.png}}\footnote{This work is licensed under a \href{http://creativecommons.org/licenses/by-sa/3.0/}{Creative Commons Attribution-ShareAlike 3.0 Unported License}.}
+\end{center}
+
+\tableofcontents
+
+\include*{00-intro}
+\include*{01-rlsim}
+\include*{02-effest}
+\include*{03-xtools}
+\include*{05-ack}
+
+\bibliographystyle{plainurl}
+\bibliography{ref}
+\addcontentsline{toc}{section}{References}
+
+\end{document}

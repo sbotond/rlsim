@@ -1,0 +1,129 @@
+\section{Additional tools}
+
+\subsection{{\tt plot\_rlsim\_report}: plotting \rlsim reports}
+
+\begin{verbatim}
+usage: plot_rlsim_report [-h] [input file]
+
+Plot rlsim report (version 1.0).
+
+positional arguments:
+  input file  rlsim report file.
+
+optional arguments:
+  -h, --help  show this help message and exit
+\end{verbatim}
+
+This tool takes the \rlsim report file and generates a PDF report of the simulation details.
+
+\subsection{{\tt sel}: sampling expression levels}
+
+
+\begin{verbatim}
+usage: sel [-h] [-t] [-d dist_param] [-b nr_bins] [-r report_fil]
+           [input fasta file]
+
+Sample expression levels from a mixture of gamma distributions (version 1.0).
+
+positional arguments:
+  input fasta file  Transcripts and expression levels in Fasta format.
+
+optional arguments:
+  -h, --help        show this help message and exit
+  -t                Trim sequence names.
+  -d dist_param     Expression level distribution.
+  -b nr_bins        Number of bins in histogram.
+  -r report_fil     Report PDF file.
+\end{verbatim}
+
+This tool takes a fasta file as input and produces fasta files augmented with the expression levels sampled from a mixture of gamma distributions
+specified by the -d flag (default: \texttt{"0.5:g:(5e3,0.5) + 0.5:g:(5e4,1000)"}). It also produces a report PDF with a histogram of the sampled expression levels.
+
+\subsection{{\tt pb\_plot}: plotting sequence biases}
+
+\begin{verbatim}
+usage: pb_plot [-h] [-f ref_fasta] [-r report_file] [-w winsize] [-q min_qual]
+               [-p pickle_file]
+               [input file]
+
+Visualise sequence biases around fragment start/end (version 1.0).
+
+positional arguments:
+  input file      Aligned *paired end* reads in SAM format.
+
+optional arguments:
+  -h, --help      show this help message and exit
+  -f ref_fasta    Reference sequences in fasta format.
+  -r report_file  Name of PDF report file.
+  -w winsize      Window size.
+  -q min_qual     Minimum mapping quality.
+  -p pickle_file  Results pickle file.
+\end{verbatim}
+
+This tool plots the counts of the bases (controlled by the \texttt{-w} flag) around the start and end of fragments defined by the paired-end reads in the input SAM file. It also reports the GC content distribution of the fragments. The input file must be sorted by read name!
+See section \ref{sss:frag_methods} for example plots.
+
+\subsection{{\tt cov\_cmp}: comparing coverage trends}
+
+\begin{verbatim}
+usage: cov_cmp [-h] -f ref_fasta [-g] [-t nr_top] [-i iso_list]
+               [-l min_length] [-r report_file] [-q min_qual] [-p pickle_file]
+               [-v]
+               input file input file
+
+Compare coverage trends between two datasets (version 1.0).
+
+positional arguments:
+  input file      Two sets of aligned *paired end* reads in SAM format.
+
+optional arguments:
+  -h, --help      show this help message and exit
+  -f ref_fasta    Reference sequences in fasta format.
+  -g              Do not color by AT/GC.
+  -t nr_top       Plot at least this many top matches.
+  -i iso_list     List of single isoform genes.
+  -l min_length   Minimum transcript length.
+  -r report_file  Name of PDF report file.
+  -q min_qual     Minimum mapping quality.
+  -p pickle_file  Results pickle file.
+  -v              Toggle verbose mode.
+\end{verbatim}
+
+The \texttt{cov\_cmp} tool takes two datasests mapped on the same transcriptome and reports the rank correlation of transcript level fragment counts and the per-transcript rank correlation of the \emph{fragment} count vectors:
+
+\begin{verbatim}
+./cov_cmp -f test/ref.fas test/aln1.sam test/aln2.sam
+Per-transcript fragment count rank correlation: rho=0.93007, p=1.17022e-05
+Transcript              p-value         rho
+tr15$48765              2.96119e-18             0.101709
+tr8$13360               2.70926e-33             0.275761
+tr6$49718               8.59522e-22             0.101769
+tr13$313                0.027806                0.0281846
+tr12$50515              2.95321e-38             0.211815
+tr9$8395                0.000619112             0.03841
+tr10$52401              3.32435e-43             0.171195
+tr14$48371              6.27646e-15             0.0910417
+tr5$48415               5.6484e-34              0.14148
+tr11$47470              2.78874e-156            0.6647
+tr7$51463               8.49106e-53             0.377702
+\end{verbatim}
+
+The PDF report contains various plots aiding the comparison of coverage trends.
+
+\subsection{{\tt plot\_cov}: plot read coverage colored by reference base}
+
+\begin{verbatim}
+usage: plot_cov [-h] -r ref_fasta -b bam [-o outfile]
+
+Plot read coverage colored by the reference base (AT - blue, GC - red). This
+tools requires samtools to be installed in path.
+
+optional arguments:
+  -h, --help    show this help message and exit
+  -r ref_fasta  Reference transcriptome.
+  -b bam        Position sorted and indexed BAM file.
+  -o outfile    Output PDF (plot_cov.pdf).
+\end{verbatim}
+
+See section \ref{sss:frag_methods} for example plots.
+

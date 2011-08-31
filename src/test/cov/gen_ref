@@ -1,0 +1,36 @@
+#!/usr/bin/env python
+# Generate a sequence with alternating GC rich and AT rich regions:
+import      scipy       as      sp
+import      numpy       as      np
+import      sys
+
+UNIT_LEN_GC= 100
+UNIT_LEN_AT= 100
+UNIT_NR = 35
+
+nucs    = [ 'A'     ,'T'    ,'G'    ,'C'  ]
+
+gc_rich = [ 1       ,1      ,5      ,5  ]
+at_rich = [ 4       ,4    ,1      ,1    ]
+
+def sample_base(dist):
+    p   = np.array(dist,dtype=float)    
+    p   = np.cumsum( p/np.sum(p) )
+    u   = np.random.uniform() 
+    for i in xrange(len(p)):
+        if p[i] > u:
+            break
+    return nucs[i]
+
+print '>refT$400000'
+
+for i in xrange(1,UNIT_NR + 1):
+    if i % 2 != 0:
+        l = UNIT_LEN_AT
+        for j in xrange(l):
+            sys.stdout.write( sample_base(gc_rich) )
+    else:
+        l = UNIT_LEN_GC
+        for j in xrange(l):
+            sys.stdout.write( sample_base(at_rich) )
+print

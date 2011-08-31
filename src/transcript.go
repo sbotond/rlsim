@@ -1,45 +1,52 @@
 /*
- *  Copyright (C) 2011 by Botond Sipos, European Bioinformatics Institute
- *  sbotond@ebi.ac.uk
- *
- *  This file is part of the rlsim software for simulating RNA-seq
- *  library preparation with PCR biases and size selection.
- *
- *  rlsim is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  rlsim is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with rlsim.  If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2013 EMBL - European Bioinformatics Institute
+*
+* This program is free software: you can redistribute it
+* and/or modify it under the terms of the GNU General
+* Public License as published by the Free Software
+* Foundation, either version 3 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be
+* useful, but WITHOUT ANY WARRANTY; without even the
+* implied warranty of MERCHANTABILITY or FITNESS FOR A
+* PARTICULAR PURPOSE. See the GNU General Public License
+* for more details.
+*
+* Neither the institution name nor the name rlsim
+* can be used to endorse or promote products derived from
+* this software without prior written permission. For
+* written permission, please contact <sbotond@ebi.ac.uk>.
+
+* Products derived from this software may not be called
+* rlsim nor may rlsim appear in their
+* names without prior written permission of the developers.
+* You should have received a copy of the GNU General Public
+* License along with this program. If not, see
+* <http://www.gnu.org/licenses/>.
+*/
 
 package main
 
 import (
+	"encoding/gob"
 	"fmt"
-	"path"
-	"gob"
 	"os"
+	"path"
 	"strings"
 )
 
 type Transcripter interface {
 	GetName() string
 	GetSeq() string
-	SimulatePolyA(polyAmean int, polyAmax int, st FragStater, rand Rander) int
 	GetRevSeq() string
+	SimulatePolyA(polyAParam *TargetMix, polyAmax int, st FragStater, rand Rander) int
 	GetExprLevel() uint64
 	GetLen() uint32
 	RegisterFragment(length uint32, start uint32, end uint32)
 	SampleFragment(length uint32, rand Rander) Fragment
 	Flatten()
-	Fragment(tg Targeter, fg Fragmentor, polyAmean int, polyAmax int, st FragStater, rand Rander)
+	Fragment(tg Targeter, fg Fragmentor, polyAparam *TargetMix, polyAmax int, st FragStater, rand Rander)
 	Pcr(p Pooler, tc Thermocycler, st FragStater, rand Rander)
 	GetFragStructs() *map[uint32]StartEndCountStruct
 	String() string
@@ -77,6 +84,17 @@ func init() {
 	maxTranscriptId = 0
 }
 
+func getGobFile(gobDir string, id uint64, name string) string {
+	subDir := path.Join(gobDir, FirstNDigits(id, 3))
+	if !FileExists(subDir) {
+		err := os.Mkdir(subDir, 0700)
+		if err != nil {
+			L.Fatalf("Error when creating directory %s: %s", subDir, err.Error())
+		}
+	}
+	return path.Join(subDir, fmt.Sprintf("%d_%s.gob", id, name))
+}
+
 func NewTranscript(name string, seq string, level uint64, polyAmax int, gobDir string) (tr *Transcript) {
 	tr = new(Transcript)
 	tr.id = maxTranscriptId
@@ -90,9 +108,11 @@ func NewTranscript(name string, seq string, level uint64, polyAmax int, gobDir s
 	tr.FragMap = &valFragMap
 	valFragStructs := make(map[uint32]StartEndCountStruct, 0)
 	tr.FragStructs = &valFragStructs
+
 	if gobDir != "" {
-		tr.gobFile = path.Join(gobDir, fmt.Sprintf("%d_%s.gob", tr.id, tr.name))
+		tr.gobFile = getGobFile(gobDir, tr.id, tr.name)
 	}
+
 	return
 }
 
@@ -116,16 +136,16 @@ func (tr Transcript) GetExprLevel() uint64 {
 	return tr.exprLevel
 }
 
-func (tr Transcript) Fragment(tg Targeter, fg Fragmentor, polyAmean int, polyAmax int, st FragStater, rand Rander) {
+func (tr Transcript) Fragment(tg Targeter, fg Fragmentor, polyAParam *TargetMix, polyAmax int, st FragStater, rand Rander) {
 	level := tr.GetExprLevel()
 	// Calculate binding profile:
-	bindProf := fg.GetBindingProfile(tr)
+	bindProfs := fg.GetBindingProfiles(tr)
 	var i uint64
 	for ; i < level; i++ {
 		// Simulate poly-A tail:
-		polyAend := tr.SimulatePolyA(polyAmean, polyAmax, st, rand)
+		polyAend := tr.SimulatePolyA(polyAParam, polyAmax, st, rand)
 		// Fragment transcript:
-		fg.Fragment(tr, bindProf, polyAend, st, rand)
+		fg.Fragment(tr, bindProfs, polyAend, st, rand)
 	}
 }
 
@@ -195,7 +215,7 @@ func (tr Transcript) Flatten() {
 }
 
 func (tr Transcript) String() string {
-	s := fmt.Sprintf("%s|%d", tr.GetName(), tr.GetExprLevel())
+	s := fmt.Sprintf("%s$%d", tr.GetName(), tr.GetExprLevel())
 	return s
 }
 
@@ -209,7 +229,7 @@ func (tr Transcript) Cleanup() {
 	}
 	err := os.Remove(tr.gobFile)
 	if err != nil {
-		L.Fatalf("Could not remove gob file \"%s\": %s", tr.gobFile, err.String())
+		L.Fatalf("Could not remove gob file \"%s\": %s", tr.gobFile, err.Error())
 	}
 }
 
@@ -219,13 +239,13 @@ func (tr Transcript) Gob() {
 	}
 	f, err := os.Create(tr.gobFile)
 	if err != nil {
-		L.Fatalf("Could not create gob file \"%s\": %s", tr.gobFile, err.String())
+		L.Fatalf("Could not create gob file \"%s\": %s", tr.gobFile, err.Error())
 	}
 	defer f.Close()
 	encoder := gob.NewEncoder(f)
 	err = encoder.Encode(*tr.FragStructs)
 	if err != nil {
-		L.Fatalf("Failed to encode fragemnts for transcript %s: %s", tr.name, err.String())
+		L.Fatalf("Failed to encode fragemnts for transcript %s: %s", tr.name, err.Error())
 	}
 	// Discard fragment structure:
 	*tr.FragStructs = nil
@@ -240,7 +260,7 @@ func (tr Transcript) Ungob() {
 	}
 	f, err := os.Open(tr.gobFile)
 	if err != nil {
-		L.Fatalf("Could not open gob file \"%s\": %s", tr.gobFile, err.String())
+		L.Fatalf("Could not open gob file \"%s\": %s", tr.gobFile, err.Error())
 	}
 	defer f.Close()
 	val := make(map[uint32]StartEndCountStruct)
@@ -256,9 +276,9 @@ func (tr Transcript) JettisonFragStructs() {
 	*tr.FragStructs = nil
 }
 
-func (tr Transcript) SimulatePolyA(polyAmean int, polyAmax int, st FragStater, rand Rander) int {
-	polyAlength := rand.TruncExpInt(polyAmean, polyAmax)
+func (tr Transcript) SimulatePolyA(polyAParam *TargetMix, polyAmax int, st FragStater, rand Rander) int {
+	polyAlength := polyAParam.SampleMixLen(rand)
 	st.UpdatePolyALen(uint32(polyAlength))
 	// If polyAlength === polyAmax => tr.len is returned
-	return (int(tr.len) - polyAmax + polyAlength)
+	return (int(tr.len) - polyAmax + int(polyAlength))
 }

@@ -1,7 +1,14 @@
-.PHONY: ct  com push fetch gt fmt
+all: rlsim tools
 
+.PHONY: ct  com push fetch gt fmt fix
+
+TOOLS=../tools
+
+# Utility targets:
 ct:
 	git log --graph
+fmt: *.go
+	go fmt *.go
 com: fmt
 	git commit -a
 push:
@@ -10,29 +17,32 @@ fetch:
 	git fetch --all
 gt:
 	gitk --all
+fix:
+	go fix .
+# Run standard test:
 t: rlsim
-	./rlsim -n 2000 ../test/basic/test_transcripts.fas > /dev/null
+	./rlsim -v -j test/basic/raw_params.json -n 2000 ./test/basic/test_transcripts.fas > /dev/null
+	$(TOOLS)/plot_rlsim_report
+# Run small test:
 st: rlsim
-	./rlsim -n 200 ../test/basic/test_transcripts.fas 
-bt: rlsim
-	./rlsim -n 30000000 -t 4 -prof prof.out ../test/big_test/test_transcripts_full.fas > /dev/null
-lt:
-	./sel ../test/basic/raw_transcripts.fas
-prof:
-	gopprof ./rlsim prof.out
+	./rlsim -v -n 10 ./test/basic/test_transcripts.fas 
+	$(TOOLS)/plot_rlsim_report
+# Run big test with profiling:
+rprof: rlsim
+	./rlsim -v -n 3000000 -t 4 -f "after_prim_double" -prof prof.out ./test/basic/test_transcripts_full.fas > /dev/null
+	$(TOOLS)/plot_rlsim_report
+# View profiling results:
+vprof:
+	go tool pprof ./rlsim prof.out
 
-
-include $(GOROOT)/src/Make.inc
-
-GC:=$(GC) -I ./fasta/_obj
-LD:=$(LD) -L ./fasta/_obj
- 
+# Main target:
 TARG=rlsim
 GOFILES=\
 	main.go\
 	args.go\
 	frag.go\
 	fragmentor.go\
+	fragfilter.go\
 	nnthermo.go\
 	pool.go\
 	report.go\
@@ -45,7 +55,18 @@ GOFILES=\
 	random.go\
 	logging.go\
 	fragstats.go\
+	target_mix.go\
     version.go\
+	fasta.go\
+	parse_raw.go\
+	raw_target.go\
 
-include $(GOROOT)/src/Make.cmd 
+rlsim: $(GOFILES)
+	go build -o $(TARG) $(GOFILES)
 
+tools:
+	@cd ../tools;make; cd ..
+
+clean:
+	rm -f $(TARG)
+	@cd ../tools;make clean; cd ..

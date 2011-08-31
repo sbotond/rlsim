@@ -1,0 +1,196 @@
+#!/usr/bin/env python
+#
+# Copyright (C) 2013 EMBL - European Bioinformatics Institute
+#
+# This program is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General
+# Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE. See the GNU General Public License
+# for more details.
+#
+# Neither the institution name nor the name rlsim
+# can be used to endorse or promote products derived from
+# this software without prior written permission. For
+# written permission, please contact <sbotond@ebi.ac.uk>.
+
+# Products derived from this software may not be called
+# rlsim nor may rlsim appear in their
+# names without prior written permission of the developers.
+# You should have received a copy of the GNU General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
+VERSION="1.0"
+
+import      matplotlib
+matplotlib.use('Agg')
+import      argparse
+import      re
+from        matplotlib                      import  pyplot          as  plt
+from        collections                     import  defaultdict
+from        matplotlib.backends.backend_pdf import  PdfPages
+import      numpy                           as      np
+from        Bio                             import  SeqIO
+import      subprocess                      as      subp
+import      os
+
+# Exception class:
+class MyError(Exception):
+    def __init__(self, value):
+        self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+# Function for parsing command line arguments:
+def parse_arguments():
+    parser  = argparse.ArgumentParser(description='Plot read coverage colored by the reference base (AT - blue, GC - red). This tools requires samtools to be installed in path.')
+    parser.add_argument('-r', metavar='ref_fasta', type=str, default=None,required=True, help='Reference transcriptome.')
+    parser.add_argument('-b', metavar='bam', type=str, default="alns.bam",required=True, help='Position sorted and indexed BAM file.')
+    parser.add_argument('-o', metavar='outfile', type=str, default="plot_cov.pdf",required=False, help='Output PDF (plot_cov.pdf).')
+    args    = parser.parse_args()
+    return args
+
+# Class handling PDF output:
+class PDFReport:
+    def __init__(self, pdf):
+        self.pdf    = pdf
+        self.pages  = PdfPages(pdf)
+        self.fig    = plt.figure()
+
+    def plot_hash_bar(self, x, y, fig):
+        plt.bar(x, y, width=0.1)
+
+    def plot_hash_line(self, x, y, fig):
+        plt.plot(x, y,'b-')
+    
+    def plot_cov(self, pos, cov, base):
+        col     = { 'A': 'blue', 'T': 'blue', 'G': 'red', 'C': 'red'}
+        plt.plot(pos,cov,marker="|",color=col[base])
+
+    def close(self):
+        self.pages.close()
+
+    def new_fig(self, name):
+        plt.title(name)
+        self.fig    = plt.figure()
+
+    def save_fig(self):
+        self.pages.savefig(self.fig)
+        plt.clf()
+        plt.close(self.fig)
+
+
+def get_cov_vector(bam, tr, l):
+    cmd = ["samtools","mpileup","-r",tr,bam]
+    DEVNULL = open(os.devnull,'w')
+    sp  = subp.Popen(cmd,stdout=subp.PIPE,stderr=DEVNULL)
+    pos = [ ]
+    cov = [ ]   
+
+    line = sp.stdout.readline()
+    tmp  = line.split()
+    p    = int(tmp[1]) - 1
+    c    = int(tmp[3])
+
+    if p != 0:
+        for i in xrange(0,p):
+            pos.append(i)
+            cov.append(0)
+
+    pos.append(p)
+    cov.append(0)
+
+    while True:
+        line = sp.stdout.readline()
+        if line == '':
+            break
+        tmp = line.split()
+        new_pos = (int(tmp[1]) - 1)
+        if new_pos - pos[-1] > 1:
+            for i in xrange(pos[-1]+1,new_pos):
+                pos.append(i)
+                cov.append(0)
+                
+        pos.append( new_pos)
+        cov.append(int(tmp[3]))
+
+    if pos[-1] != l-1:
+        for i in xrange(pos[-1]+1,l):
+            pos.append(i)
+            cov.append(0)
+
+    pos = np.array(pos, dtype=int)
+    cov = np.array(cov, dtype=int)
+
+    return cov
+
+def vmsg(msg):
+    """ Print verbose message """
+    if VERBOSE_MODE:
+        print >>sys.stderr, msg
+
+def die(msg):
+    rint >>sys.stderr, msg
+    sys.exit(1)
+
+def get_input_fh(input_file):
+    """ Get input file handler """
+    if input_file is None:
+        return sys.stdin
+    else:
+        fh = open(input_file,"r")
+        return fh
+
+def get_input_iter(fh):
+    """ Get fasta iterator for input """
+    return SeqIO.parse(fh,'fasta')
+
+
+def slurp_sequences(inf):
+    """ Store all input sequences as a list of tupples """
+    sequences = [ ]
+    fh      = get_input_fh(inf)
+    siter   = get_input_iter(fh)
+    for s in siter:
+        name = s.name
+        sequences.append( (name,str(s.seq)) )
+    return sequences
+
+def plot_coverage(tr, cov, rep):
+    name    = tr[0]
+    seq     = tr[1]
+
+    x       = xrange(len(cov))
+    y       = cov
+    col     = { 'A': 'blue', 'T': 'blue', 'G': 'red', 'C': 'red'}
+    for i in x:
+        plt.bar(x[i], y[i],color=col[seq[i]],edgecolor=col[seq[i]])
+    plt.xlim(0, len(seq))
+
+##
+## main section:
+##
+
+# Parse command line arguments:
+args    = parse_arguments()
+
+trs     = slurp_sequences( args.r )
+
+# Construct report object:
+report  = PDFReport(args.o)
+
+for tr in trs:
+    name        = tr[0]
+    print "Plotting coverage for transcript: %s" % name
+    cov         = get_cov_vector(args.b, name, len(tr[1]))
+    report.new_fig(name)
+    plot_coverage(tr, cov, report)
+    report.save_fig()
+
+report.close()

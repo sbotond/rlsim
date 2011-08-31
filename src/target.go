@@ -1,23 +1,30 @@
 /*
- *  Copyright (C) 2011 by Botond Sipos, European Bioinformatics Institute
- *  sbotond@ebi.ac.uk
- *
- *  This file is part of the rlsim software for simulating RNA-seq
- *  library preparation with PCR biases and size selection.
- *
- *  rlsim is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  rlsim is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with rlsim.  If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2013 EMBL - European Bioinformatics Institute
+*
+* This program is free software: you can redistribute it
+* and/or modify it under the terms of the GNU General
+* Public License as published by the Free Software
+* Foundation, either version 3 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be
+* useful, but WITHOUT ANY WARRANTY; without even the
+* implied warranty of MERCHANTABILITY or FITNESS FOR A
+* PARTICULAR PURPOSE. See the GNU General Public License
+* for more details.
+*
+* Neither the institution name nor the name rlsim
+* can be used to endorse or promote products derived from
+* this software without prior written permission. For
+* written permission, please contact <sbotond@ebi.ac.uk>.
+
+* Products derived from this software may not be called
+* rlsim nor may rlsim appear in their
+* names without prior written permission of the developers.
+* You should have received a copy of the GNU General Public
+* License along with this program. If not, see
+* <http://www.gnu.org/licenses/>.
+*/
 
 package main
 
@@ -52,6 +59,10 @@ func NewTarget(ReqFrags int64, TargetMix *TargetMix, rand Rander) Target {
 	tg.ReqFrags = ReqFrags
 	L.PrintfV("Number of requested fragments: %d\n", ReqFrags)
 	tg.TargetMix = TargetMix
+	L.PrintfV("Target fragment length distribution components:")
+	for _, l := range StringToSlice(tg.TargetMix.String()) {
+		L.PrintfV("%s\n", l)
+	}
 	tg.SampleLengths(rand)
 	L.PrintfV("Finished sampling target lengths.")
 	tg.Low, tg.High = getGlobalMinMax(TargetMix)
@@ -85,18 +96,7 @@ func (tg Target) GetHigh() uint64 {
 
 func (tg Target) SampleMixComp(rand Rander) *MixComp {
 	mix := tg.TargetMix
-	p := make([]float64, len(mix.Components))
-	comps := make([]*MixComp, len(mix.Components))
-
-	i := 0
-	for k, v := range mix.Components {
-		p[i] = v
-		comps[i] = k
-		i++
-	}
-
-	index, _ := rand.SampleIndexFloat64(p)
-	return comps[index]
+	return mix.SampleMixComp(rand)
 }
 
 func (tg Target) SampleLengths(rand Rander) {
@@ -105,8 +105,8 @@ func (tg Target) SampleLengths(rand Rander) {
 	var i int64
 	for i = 0; i < tg.ReqFrags; i++ {
 		comp := tg.SampleMixComp(rand)
-		l := rand.TruncNormUint64(comp.Mean, comp.Sd, comp.Low, comp.High)
-		tmp[uint32(l)]++
+		l := comp.SampleLength(rand)
+		tmp[l]++
 	}
 	// Flatten map:
 	lcs := tg.TargetLengths
@@ -117,7 +117,7 @@ func (tg Target) SampleLengths(rand Rander) {
 	for length, count := range tmp {
 		lcs.Length[i] = length
 		lcs.Count[i] = count
-		tmp[length] = 0, false
+		delete(tmp, length)
 		i++
 	}
 }
@@ -140,6 +140,6 @@ func (tg Target) GetReqFrags() int64 {
 }
 
 func (tg Target) SampleMixLen(rand Rander) uint32 {
-	comp := tg.SampleMixComp(rand)
-	return uint32(rand.TruncNormUint64(comp.Mean, comp.Sd, comp.Low, comp.High))
+	comp := tg.TargetMix.SampleMixComp(rand)
+	return comp.SampleLength(rand)
 }

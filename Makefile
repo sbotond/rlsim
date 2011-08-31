@@ -1,28 +1,35 @@
+VERSION	= 1.0
+RD		= rlsim-$(VERSION)_amd64
+all: rlsim docs
 
-include $(GOROOT)/src/Make.inc
-
-GC:=$(GC) -I ./src/fasta/_obj
-LD:=$(LD) -L ./src/fasta/_obj
- 
 TARG=rlsim
-GOFILES=\
-	src/main.go\
-	src/args.go\
-	src/frag.go\
-	src/fragmentor.go\
-	src/nnthermo.go\
-	src/pool.go\
-	src/report.go\
-	src/sampler.go\
-	src/target.go\
-	src/transcript.go\
-	src/utils.go\
-	src/input.go\
-	src/thermocycler.go\
-	src/random.go\
-	src/logging.go\
-	src/fragstats.go\
-    src/version.go\
 
-include $(GOROOT)/src/Make.cmd 
+tools/effest:
+	@cd tools; make
 
+rlsim:
+	@cd src; make; cp $(TARG) ../
+
+docs:
+	@cd doc; make; cd ..
+
+clean:
+	rm -f $(TARG)
+	@cd src; make clean; cd ..
+	@cd doc; make clean; cd ..
+
+release: rlsim docs tools/effest
+	@mkdir -p $(RD)/bin
+	@cp rlsim $(RD)/bin
+	@cp tools/effest $(RD)/bin
+	@cp tools/plot_rlsim_report $(RD)/bin
+	@cp tools/sel $(RD)/bin
+	@cp tools/cov_cmp $(RD)/bin
+	@cp tools/pb_plot $(RD)/bin
+	@cp doc/rlsim_manual.pdf $(RD)
+	@cp README.md $(RD)/
+	@cp COPYING $(RD)/
+	@tar -cvzf $(RD).tar.gz $(RD) && rm -r $(RD)
+	@cp $(RD).tar.gz releases/rlsim-latest_amd64.tar.gz
+	@mv $(RD).tar.gz releases/
+	@echo Relase $(RD) packaged.

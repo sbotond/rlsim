@@ -1,23 +1,30 @@
 /*
- *  Copyright (C) 2011 by Botond Sipos, European Bioinformatics Institute
- *  sbotond@ebi.ac.uk
- *
- *  This file is part of the rlsim software for simulating RNA-seq
- *  library preparation with PCR biases and size selection.
- *
- *  rlsim is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  rlsim is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with rlsim.  If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2013 EMBL - European Bioinformatics Institute
+*
+* This program is free software: you can redistribute it
+* and/or modify it under the terms of the GNU General
+* Public License as published by the Free Software
+* Foundation, either version 3 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be
+* useful, but WITHOUT ANY WARRANTY; without even the
+* implied warranty of MERCHANTABILITY or FITNESS FOR A
+* PARTICULAR PURPOSE. See the GNU General Public License
+* for more details.
+*
+* Neither the institution name nor the name rlsim
+* can be used to endorse or promote products derived from
+* this software without prior written permission. For
+* written permission, please contact <sbotond@ebi.ac.uk>.
+
+* Products derived from this software may not be called
+* rlsim nor may rlsim appear in their
+* names without prior written permission of the developers.
+* You should have received a copy of the GNU General Public
+* License along with this program. If not, see
+* <http://www.gnu.org/licenses/>.
+*/
 
 package main
 
@@ -27,7 +34,7 @@ import (
 )
 
 type Pooler interface {
-	InitTranscripts(input Inputer, tg Targeter, fg Fragmentor, tc Thermocycler, st FragStater, GCFreq int, polyAmean int, polyAmax int, rand Rander)
+	InitTranscripts(input Inputer, tg Targeter, fg Fragmentor, tc Thermocycler, st FragStater, GCFreq int, polyAParam *TargetMix, exprMul float64, rand Rander, pcrRand Rander)
 	AddTranscript(tr Transcripter)
 	GetGobDir() string
 	RegisterFragments(tr Transcripter, length uint32, count uint64)
@@ -54,6 +61,7 @@ type Pool struct {
 	LenTrCountStructs map[uint32]*TrCountStruct
 	GobDir            string
 }
+
 // Pool constructor:
 func NewPool(gobDir string) *Pool {
 	p := new(Pool)
@@ -65,30 +73,44 @@ func NewPool(gobDir string) *Pool {
 	if p.GobDir != "" {
 		err := os.Mkdir(p.GobDir, 0700)
 		if err != nil {
-			L.Fatalf("Cannot create god directory \"%s\": %s", p.GobDir, err.String())
+			L.Fatalf("Cannot create gob directory \"%s\": %s", p.GobDir, err.Error())
 		}
 	}
 	return p
 }
 
 // Initialize transcripts from input
-func (p Pool) InitTranscripts(input Inputer, tg Targeter, fg Fragmentor, tc Thermocycler, st FragStater, GCFreq int, polyAmean int, polyAmax int, rand Rander) {
-	c := input.GetTranscriptChan(p.GobDir, polyAmax)
+func (p Pool) InitTranscripts(input Inputer, tg Targeter, fg Fragmentor, tc Thermocycler, st FragStater, GCFreq int, polyAParam *TargetMix, exprMul float64, rand Rander, pcrRand Rander) {
+	_, polyAmax := getGlobalMinMax(polyAParam)
+	L.PrintfV("Poly(A) tail distribution components:")
+	for _, l := range StringToSlice(polyAParam.String()) {
+		L.PrintfV("%s\n", l)
+	}
+	c := input.GetTranscriptChan(p.GobDir, int(polyAmax), st, exprMul)
 
 	if p.GobDir != "" {
-		L.Printf("Fragments will be cached to %s.", p.GobDir)
+		L.PrintfV("Fragments will be cached to %s.", p.GobDir)
 	}
 
 	L.PrintfV("Fragmenting transcripts and amplifying fragments:\n")
 	var trCount uint64
+
+	// Collect garbage before starting fragmentation:
+	runtime.GC()
+
 	for tr := range c {
 		L.PrintfV("\t%d\t%s\n", trCount, tr.String())
+		// Skip if not expressed:
+		if tr.GetExprLevel() == 0 {
+			trCount++
+			continue
+		}
 		// Fragment transcript:
-		tr.Fragment(tg, fg, polyAmean, polyAmax, st, rand)
+		tr.Fragment(tg, fg, polyAParam, int(polyAmax), st, rand) // uses initial seed
 		// Flatten fragment table:
 		tr.Flatten()
 		// Amplify fragments:
-		tr.Pcr(p, tc, st, rand)
+		tr.Pcr(p, tc, st, pcrRand) // uses initial or PCR seed
 		// Add transcript to pool:
 		p.AddTranscript(tr)
 		// Store fragments:
@@ -143,6 +165,7 @@ func (p Pool) RegisterFragments(tr Transcripter, length uint32, count uint64) {
 	}
 
 }
+
 // Linearize LenTrCountMap:
 func (p Pool) Flatten() {
 	m := p.LenTrCountStructs
@@ -160,7 +183,7 @@ func (p Pool) Flatten() {
 		}
 		m[length] = &TrCountStruct{trS, countS}
 		// Delete transcript/count map:
-		p.LenTrCountMap[length] = nil, false
+		delete(p.LenTrCountMap, length)
 	}
 
 }
@@ -181,7 +204,7 @@ func (p Pool) SampleTranscript(length uint32, rand Rander) (Transcripter, bool) 
 }
 
 func (p Pool) JettisonLenTrCounts(l uint32) {
-	p.LenTrCountStructs[l] = nil, false
+	delete(p.LenTrCountStructs, l)
 }
 
 func (p Pool) Cleanup() {
@@ -191,9 +214,9 @@ func (p Pool) Cleanup() {
 	for _, tr := range *p.Transcripts {
 		tr.Cleanup()
 	}
-	err := os.Remove(p.GobDir)
+	err := os.RemoveAll(p.GobDir)
 	if err != nil {
-		L.Fatalf("Could not remove gob directory \"%s\": %s", p.GobDir, err.String())
+		L.Fatalf("Could not remove gob directory \"%s\": %s", p.GobDir, err.Error())
 	}
 }
 

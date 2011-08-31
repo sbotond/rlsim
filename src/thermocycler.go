@@ -1,23 +1,30 @@
 /*
- *  Copyright (C) 2011 by Botond Sipos, European Bioinformatics Institute
- *  sbotond@ebi.ac.uk
- *
- *  This file is part of the rlsim software for simulating RNA-seq
- *  library preparation with PCR biases and size selection.
- *
- *  rlsim is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  rlsim is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with rlsim.  If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2013 EMBL - European Bioinformatics Institute
+*
+* This program is free software: you can redistribute it
+* and/or modify it under the terms of the GNU General
+* Public License as published by the Free Software
+* Foundation, either version 3 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be
+* useful, but WITHOUT ANY WARRANTY; without even the
+* implied warranty of MERCHANTABILITY or FITNESS FOR A
+* PARTICULAR PURPOSE. See the GNU General Public License
+* for more details.
+*
+* Neither the institution name nor the name rlsim
+* can be used to endorse or promote products derived from
+* this software without prior written permission. For
+* written permission, please contact <sbotond@ebi.ac.uk>.
+
+* Products derived from this software may not be called
+* rlsim nor may rlsim appear in their
+* names without prior written permission of the developers.
+* You should have received a copy of the GNU General Public
+* License along with this program. If not, see
+* <http://www.gnu.org/licenses/>.
+*/
 
 package main
 
@@ -29,21 +36,71 @@ type Thermocycler interface {
 }
 
 type Techne struct {
-	NrCycles  int64
-	FixedEff  float64
-	GcEffA    float64
-	GcEffB    float64
-	LenEffPar float64
+	NrCycles    int64
+	FixedEff    float64
+	GcEffParam  *EffParam
+	LenEffParam *EffParam
+	Target      Targeter
+	LenScalers  *LenScalers
+	RawGcEffs   []float64
+	hasRawEffs  bool
 }
 
-func NewTechne(NrCycles int64, FixedEff float64, GcEffA float64, GcEffB float64, LenEffPar float64) *Techne {
+type LenScalers struct {
+	A float64
+	B float64
+}
+
+func NewTechne(NrCycles int64, FixedEff float64, gcEffParam *EffParam, rawGcEffs []float64, minRawGcEff float64, lenEffParam *EffParam, tg Targeter) *Techne {
 	tn := new(Techne)
 	tn.NrCycles = NrCycles
+	L.PrintfV("Number of PCR cycles: %d", NrCycles)
 	tn.FixedEff = FixedEff
-	tn.GcEffA = GcEffA
-	tn.GcEffB = GcEffB
-	tn.LenEffPar = LenEffPar
+	if FixedEff != 0.0 {
+		// Got fixed amplification efficiency:
+		L.PrintfV("Using fixed amplifcation efficiency: %g", FixedEff)
+	} else {
+
+		if rawGcEffs != nil {
+			// Got raw gc efficiencies: 
+			L.PrintfV("Using raw GC efficiencies with a minimum efficiency: %g", minRawGcEff)
+			tn.RawGcEffs = tn.ProcessRawGcEffs(rawGcEffs, minRawGcEff)
+			tn.hasRawEffs = true
+		} else {
+			L.PrintfV("GC dependent efficiency parameters: (%g,%g,%g)", gcEffParam.Shape, gcEffParam.Min, gcEffParam.Max)
+			L.PrintfV("Length dependent efficiency parameters: (%g,%g,%g)", lenEffParam.Shape, lenEffParam.Min, lenEffParam.Max)
+			tn.GcEffParam = gcEffParam
+		}
+
+		tn.LenEffParam = lenEffParam
+		// Precalculate scaling factors: 
+		tn.LenScalers = CalcLenScalers(tg, lenEffParam)
+	}
+	tn.Target = tg
 	return tn
+}
+
+func CalcLenScalers(tg Targeter, p *EffParam) *LenScalers {
+	s := new(LenScalers)
+	alpha := math.Pow(float64(tg.GetLow()), -p.Shape)
+	beta := math.Pow(float64(tg.GetHigh()), -p.Shape)
+
+	s.A = (p.Max - p.Min) / (alpha - beta)
+	s.B = p.Min - s.A*beta
+
+	return s
+}
+
+func (tn Techne) ProcessRawGcEffs(effs []float64, minEff float64) []float64 {
+	for i := 0; i < len(effs); i++ {
+		if effs[i] > 1.0 {
+			effs[i] = 1.0
+		}
+		if effs[i] < minEff {
+			effs[i] = minEff
+		}
+	}
+	return effs
 }
 
 func (tn Techne) Pcr(tr Transcripter, p Pooler, st FragStater, rand Rander) {
@@ -53,7 +110,10 @@ func (tn Techne) Pcr(tr Transcripter, p Pooler, st FragStater, rand Rander) {
 		// Total fragments with current length:
 		total := uint64(0)
 		// Calculate length efficiency:
-		lengthEff := tn.CalcLengthEff(length)
+		var lengthEff float64
+		if tn.FixedEff == 0.0 {
+			lengthEff = tn.CalcLengthEff(length)
+		}
 		size := len(sec.Count)
 		// Iterate over fragments:
 		for i := 0; i < size; i++ {
@@ -87,13 +147,15 @@ func (tn Techne) AmplifyFragment(tr Transcripter, start uint32, end uint32, icou
 }
 
 func (tn Techne) CalcLengthEff(l uint32) (e float64) {
-	// eff := l^-tn.LenEffPar
-	return math.Pow(float64(l), -tn.LenEffPar)
+	shape := tn.LenEffParam.Shape
+	if shape == 0.0 {
+		return 1.0
+	}
+	sc := tn.LenScalers
+	return sc.A*math.Pow(float64(l), -shape) + sc.B
 }
 
 func (tn Techne) CalcGcEff(tr Transcripter, start uint32, end uint32) (e float64) {
-	a := tn.GcEffA
-	b := tn.GcEffB
 	seq := tr.GetSeq()[start:end]
 	// Calculate GC content:
 	var gc float64
@@ -103,20 +165,37 @@ func (tn Techne) CalcGcEff(tr Transcripter, start uint32, end uint32) (e float64
 		}
 	}
 	gc = gc / float64(len(seq))
-	// eff := b + (1 - b) * [ (1-gc^a)^a ]
-	eff := b + (1-b)*math.Pow((1-math.Pow(gc, a)), a)
+
+	if tn.hasRawEffs {
+		return tn.RawGcEffs[int(gc*100.0)]
+	}
+
+	min := tn.GcEffParam.Min
+	max := tn.GcEffParam.Max
+	shape := tn.GcEffParam.Shape
+
+	eff := min + (max-min)*math.Pow((1-math.Pow(gc, shape)), shape)
+
 	return eff
 }
 
 func (tn Techne) CalcGcEffFixed(gc float64) (e float64) {
-	a := tn.GcEffA
-	b := tn.GcEffB
-	// eff := b + (1 - b) * [ (1-gc^a)^a ]
-	eff := b + (1-b)*math.Pow((1-math.Pow(gc, a)), a)
+	if tn.hasRawEffs {
+		return tn.RawGcEffs[int(gc*100)]
+	}
+	min := tn.GcEffParam.Min
+	max := tn.GcEffParam.Max
+	shape := tn.GcEffParam.Shape
+
+	eff := min + (max-min)*math.Pow((1-math.Pow(gc, shape)), shape)
+
 	return eff
 }
 
 func (tn Techne) ReportEffFunctions(tg Targeter, rep Reporter) {
+	if tn.FixedEff > 0.0 {
+		return
+	}
 	// Report GC efficiency function:
 	var x [201]float64
 	var y [201]float64

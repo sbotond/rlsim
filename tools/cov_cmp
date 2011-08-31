@@ -1,0 +1,529 @@
+#!/usr/bin/env python
+#
+# Copyright (C) 2013 EMBL - European Bioinformatics Institute
+#
+# This program is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General
+# Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE. See the GNU General Public License
+# for more details.
+#
+# Neither the institution name nor the name rlsim
+# can be used to endorse or promote products derived from
+# this software without prior written permission. For
+# written permission, please contact <sbotond@ebi.ac.uk>.
+
+# Products derived from this software may not be called
+# rlsim nor may rlsim appear in their
+# names without prior written permission of the developers.
+# You should have received a copy of the GNU General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
+VERSION="1.0"
+
+import      matplotlib
+matplotlib.use('Agg')
+import      sys
+from        collections import  defaultdict
+import      HTSeq       as      ht
+import      numpy       as      np
+from        matplotlib  import  pyplot  as plt
+import      argparse
+from        Bio         import  SeqIO
+from        matplotlib.backends.backend_pdf import  PdfPages
+import      string
+import      time
+import      os
+from        scipy       import  stats
+import      cPickle
+import      warnings
+
+##
+## Functions and classes:
+##
+
+def parse_arguments():
+    """ Parse arguments """
+    parser = argparse.ArgumentParser(description='Compare coverage trends between two datasets (version %s).' % VERSION)
+    parser.add_argument('input_files', metavar='input file', type=str, nargs=2, default=None, help='Two sets of aligned *paired end* reads in SAM format.')
+    parser.add_argument('-f', metavar='ref_fasta', type=str, default="", help='Reference sequences in fasta format.', required=True)
+    parser.add_argument('-g', action='store_true' ,default=False, help='Do not color by AT/GC.')
+    parser.add_argument('-t', metavar='nr_top', type=int, default=30, help='Plot at least this many top matches.', required=False)
+    parser.add_argument('-i', metavar='iso_list', type=str, default=None, help='List of single isoform genes.', required=False)
+    parser.add_argument('-l', metavar='min_length', type=int, default=0, help='Minimum transcript length.', required=False)
+    parser.add_argument('-r', metavar='report_file', type=str, default="cov_cmp.pdf", help='Name of PDF report file.')
+    parser.add_argument('-q', metavar='min_qual', type=int, default=10, help='Minimum mapping quality.')
+    parser.add_argument('-p', metavar='pickle_file', type=str, default=None, help='Results pickle file.')
+    parser.add_argument('-v', action='store_true' ,default=False, help='Toggle verbose mode.')
+    args            = parser.parse_args()
+    return args
+
+class Report:
+    """ Class for plotting reports """
+    def __init__(self, pdf):
+        self.pdf    = pdf
+        self.pages  = PdfPages(pdf)
+
+    def plot_hist(self, data, title,xlab,ylab,bins):
+        fig = plt.figure()
+        plt.hist(data, bins=bins)
+        plt.xlabel(xlab)
+        plt.ylabel(ylab)
+        plt.title(title)
+        self.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
+    def plot_arrays(self, a1, a2, title, xl, yl,t="b."):
+        fig = plt.figure()
+        plt.plot(a1, a2,t, markersize=0.2)
+        plt.title(title)
+        plt.xlabel(xl)
+        plt.ylabel(yl)
+        self.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
+    def close(self):
+        self.pages.close()
+
+class Log:
+    """ Logging utility class """
+    def __init__(self, fname=None, level=0):
+        self.level = level
+        if fname is None:
+            self.fname  = "<sys.stderr>"
+            self.file   = sys.stderr
+        else:
+            self.file   = open(fname, "w")
+            self.fname  = fname
+
+    def close(self):
+        self.file.flush()
+        self.file.close()
+
+    def log(self, message):
+        if self.level < 0:
+            return
+        self.file.write("[%s] %s\n" % (time.strftime("%y-%m-%d %H:%M:%S"), message) )
+
+    def vlog(self, message):
+        if self.level < 1:
+            return
+        self.file.write("[%s] %s\n" % (time.strftime("%y-%m-%d %H:%M:%S"), message) )
+
+    def fatal(self, message):
+        self.file.write("[%s] %s\n" % (time.strftime("%y-%m-%d %H:%M:%S"), message) )
+        sys.exit(1)
+
+class Fasta:
+    """ Fasta parsing class """
+    def __init__(self, infile):
+        self.infile     = infile
+        self.in_fh      = open(infile, "r")
+        self.iter       = SeqIO.parse(self.in_fh,'fasta')
+
+    def __iter__(self):
+        """ Return iterator """
+        return iter(self.iter)
+
+    def slurp(self, iso, min_len):
+        """ Slurp sequences """
+        records = { }
+        for s in iter(self):
+            if len(s.seq) < min_len:
+                continue
+            if not iso.single_isoform(s.name):
+                continue
+            records[s.name] = (str(s.seq)).upper()
+        return records
+
+class SingleIsoList:
+    """ The list of single isoform genes. """
+    def __init__(self, infile, log):
+        self.log        = log
+        self.have_list  = False
+        if not infile is None:
+            self.infile = infile
+            fh          = open(infile, "r")
+            self.trs    = fh.readlines()
+            for i in xrange(len(self.trs)):
+                self.trs[i] = self.trs[i].rstrip()
+            self.have_list = True
+            self.log.vlog("Number of single isoform transcripts specified: %d" % self.size() )
+
+
+    def single_isoform(self, name):
+        if not self.have_list:
+            return True
+        else:
+            return (name in self.trs)
+
+    def size(self):
+        return len(self.trs)
+
+class ParseFrags:
+    """ Parse fragments """
+    def __init__(self, infile, ref_seq, min_qual, log):
+        self.infile     =   infile
+        self.min_qual   =   min_qual
+        self.log        =   log
+        self.ref_seq    =   ref_seq
+        self.read_iter  =   self.open_iter()
+
+    def open_iter(self):
+        if self.infile == "-":
+            self.infile = ht.FileOrSequence(sys.stdin)
+        return ht.SAM_Reader(self.infile)
+
+    def next_pair(self):
+        """ Get next read pair """
+        for (first, second) in ht.pair_SAM_alignments(self.read_iter):
+            yield (first, second)
+
+    def iter_frags(self):
+        """ Get next fragment """
+        self.open_iter()
+        min_qual    = self.min_qual
+        for pair in self.next_pair():
+            # Missing mate:
+            if (pair[0] == None) or (pair[1] == None):
+                continue
+            # Unpaired read:
+            elif (not pair[0].paired_end ) or (not pair[1].paired_end):
+                self.log.fatal("Unpaired read found in alignment!")
+            # Not a proper pair:
+            elif (not pair[0].proper_pair ) or (not pair[1].proper_pair):
+                continue
+            # One of the reads is not aligned:
+            elif (not pair[0].aligned ) or (not pair[1].aligned):
+                continue
+            elif (not pair[0].proper_pair ) or (not pair[1].proper_pair):
+                continue
+            # Mismatching reference:
+            elif pair[0].iv.chrom != pair[1].iv.chrom:
+                continue
+            # One of the reads has low mapping quality:
+            elif pair[0].aQual < min_qual or pair[1].aQual < min_qual:
+                continue
+
+            # Pull out useful info:
+            chrom           =   pair[0].iv.chrom
+            # Skip if not in the transcript list:
+            if chrom not in self.ref_seq:
+                continue
+            start, end      =   None, None
+            strand          =   "+"
+
+            # First read maps downstream:
+            if  pair[0].iv.start < pair[1].iv.start:
+                start       =   pair[0].iv.start
+                end         =   pair[1].iv.end
+            else:
+            # First read maps upstream:
+                strand      =   "-"
+                start       =   pair[1].iv.start
+                end         =   pair[0].iv.end
+
+            # Get fragment sequence:
+            frag_seq        =   self.ref_seq[chrom][start:end]
+            yield (chrom, start, end) 
+
+    def parse_frags(self):
+        """ Tabulate fragment statistics """
+        infile_name = self.infile
+        self.log.vlog("Parsing reads from file: %s" % infile_name)
+        # Dictionary tor record fragment start positions:
+        frag_tab    =   defaultdict(lambda: defaultdict(int))
+        # Dictionary to count fragments per transcript:
+        expr_levels = defaultdict(int) 
+
+        total_frags = 0
+
+        # Catch and supress HTSeq warnings: 
+        original_filters = warnings.filters[:]
+        warnings.simplefilter("ignore")
+        # Iterate over fragments:
+        try:
+            for frag in self.iter_frags():
+                if frag[0] not in self.ref_seq:
+                    continue
+                total_frags += 1
+                expr_levels[frag[0]] += 1 
+                chrom_tab = frag_tab[frag[0]]
+                chrom_tab[frag[1]] += 1
+        finally:
+            # Restore the list of warning filters.
+            warnings.filters = original_filters
+            
+        # Transform dictionary into numpy array:
+        frag_vecs = { }
+        for chrom, st in frag_tab.iteritems():
+            fm          = np.zeros((len(self.ref_seq[chrom])), dtype=float)  
+            for start, count in st.iteritems():
+                fm[start] = count
+            # Normalise by total counts:
+            frag_vecs[chrom] = fm/np.sum(fm)
+
+        self.expr_levels = expr_levels
+        self.frag_vecs = frag_vecs
+
+        self.log.vlog("Total number of counted fragments: %d" % total_frags)
+
+class ExpLevelComp:
+    """ Compare per-transcipt fragment counts """
+    def __init__(self, f1, f2, report, log): 
+        self.report = report
+        self.log    = log
+        self.f1     = f1
+        self.f2     = f2
+
+        self.build_vecs()
+        self.plot_levels()
+        self.test_levels()
+
+    def build_vecs(self):
+        """ build per-transcript fragment count vectors """
+        # Compute the intersection of transcipt sets:
+        s1    = set(self.f1.expr_levels.keys())
+        s2    = set(self.f2.expr_levels.keys())
+        trs   = s1.intersection(s2)
+
+        self.v1 = np.zeros(len(trs), dtype=float)
+        self.v2 = np.zeros(len(trs), dtype=float)
+       
+        # Fill in count vectors: 
+        i = 0
+        for t in trs:
+            self.v1[i] = self.f1.expr_levels[t]
+            self.v2[i] = self.f2.expr_levels[t]
+            i += 1
+
+        # Normalise to get relative coverage:
+        self.v1 = self.v1/np.sum(self.v1)
+        self.v2 = self.v2/np.sum(self.v2)
+
+        self.ctrs = trs
+
+    def plot_levels(self):
+        """ Plot fragment relative coverages against each other """
+        n1  = os.path.basename(self.f1.infile)
+        n2  = os.path.basename(self.f2.infile)
+        self.report.plot_arrays(self.v1, self.v2, "Fragment count correlation", n1, n2)
+    
+    def test_levels(self):
+        """ Compute Spearman rank correlation of expression levels """
+        (rho, p_val)    = stats.spearmanr(self.v1, self.v2)
+        self.rho    = rho
+        self.p_val  = p_val
+        print("Per-transcript fragment count rank correlation: rho=%g, p=%g" % (rho, p_val))
+
+class CovComp:
+    """ Class for transcript-wise comparison of coverage trends """
+    def __init__(self, ref_seq, f1, f2, ref, ctrs, top_count, gc_col, log, report):
+        self.ref_seq=ref_seq
+        self.log    = log
+        self.ref    = ref
+        self.report = report
+        self.f1     = f1
+        self.f2     = f2
+        self.ctrs   = ctrs # Set of common transcripts
+        self.top_count = top_count
+        self.gc_col = gc_col
+
+        self.cmp()
+        self.plot_cmp()
+        self.plot_top_matches()
+
+    def cmp(self):
+        """ Run analysis on the set of common transcripts """
+        pvals   = { }
+        stats   = { }
+
+        for tr in self.ctrs:
+            (p, chi2)   = self.cmp_tr(tr)
+            pvals[tr]   = p 
+            stats[tr]   = chi2
+            
+        self.pvals  = pvals
+        self.stats  = stats
+
+    def cmp_tr(self, tr):
+        """ Calculate Spearman rank correlation of coverage """
+        t1  = self.f1.frag_vecs[tr] 
+        t2  = self.f2.frag_vecs[tr] 
+        (rho, p) = stats.spearmanr(t1, t2) 
+        return (p, rho)
+
+    def plot_cmp(self):
+        """ Plot rank correlation summary """
+        self.report.plot_hist(self.stats.values(), "Rho distribution", "Rho", "count",100)
+        self.report.plot_hist(self.pvals.values(), "p-value distribution", "p-value", "count",100)
+
+    def plot_top_matches(self):
+        """ Select and plot the transcripts with the most similar coverage trends """
+        # Find the self.top_count^th p value:
+        tmp = self.pvals.values() 
+        tmp.sort()
+        lim = tmp[min(self.top_count, len(tmp)-1)]
+
+        print("Transcript\tLength\t\tp-value\t\trho")
+
+        # Plot top matches:
+        for tr, p in self.pvals.iteritems():
+            if p <= lim:
+                print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), p, self.stats[tr])
+                if self.gc_col:
+                    self.tr2bars(tr)
+                    self.tr2cmp(tr)
+                else:
+                    self.tr2bars_gc_col(tr)
+                    self.tr2cmp_gc_col(tr)
+
+    def tr2bars(self, tr):
+        """ Plot coverage coverage for a trancript """
+        seq = self.ref[tr]
+        y1  = self.f1.frag_vecs[tr]
+        y2  = self.f2.frag_vecs[tr]
+        x       = np.arange(len(y1))
+        col     = { 'A': 'blue', 'T': 'blue', 'G': 'red', 'C': 'red'}
+        fig = plt.figure()
+
+        plt.plot(x, y1,'b.', markersize=0.1)
+        plt.plot(x, -y2,'b.', markersize=0.1)
+    
+        plt.title("%s - %s" % (tr, os.path.basename(self.f1.infile)) )
+        plt.suptitle("p=%e, Rho=%e" % (self.pvals[tr], self.stats[tr]) )
+        plt.xlabel("%s - %s"% (tr, os.path.basename(self.f2.infile)) )
+        plt.ylabel("Relative coverage")
+        self.report.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+     
+    def tr2bars_gc_col(self, tr):
+        """ Plot coverage coverage for a transcript with GC colors """
+        seq = self.ref[tr]
+        y1  = self.f1.frag_vecs[tr]
+        y2  = self.f2.frag_vecs[tr]
+        x       = np.arange(len(y1))
+        col     = { 'A': 'b', 'T': 'b', 'G': 'r', 'C': 'r'}
+        fig = plt.figure()
+
+        blue_idx, red_idx = [], []
+
+        for i in xrange(len(y1)):
+            if col[seq[i]] == 'b':
+                blue_idx.append(i)
+            else:
+                red_idx.append(i)
+        blue_idx = np.array(blue_idx)
+        red_idx  = np.array(red_idx)
+
+        ms = 0.1
+        plt.vlines(blue_idx,0, y1[blue_idx],color='b',linestyles='solid', linewidth=ms)
+        plt.vlines(red_idx,0,  y1[red_idx],color='r',linestyles='solid', linewidth=ms)
+        plt.vlines(blue_idx,0, -y2[blue_idx],color='b',linestyles='solid', linewidth=ms)
+        plt.vlines(red_idx,0,  -y2[red_idx],color='r',linestyles='solid', linewidth=ms)
+
+        plt.title("%s - %s" % (tr, self.f1.infile) )
+        plt.suptitle("p=%e, Rho=%e" % (self.pvals[tr], self.stats[tr]) )
+        plt.xlabel("%s - %s"% (tr, self.f2.infile) )
+        plt.ylabel("Relative coverage")
+        self.report.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+    
+    def tr2cmp(self, tr):
+        """ Plot cumulative coverage vectors against each other """
+        seq = self.ref[tr]
+        y1  = self.f1.frag_vecs[tr]
+        y2  = self.f2.frag_vecs[tr]
+        x       = np.arange(len(y1))
+        fig = plt.figure()
+
+        plt.plot(y1.cumsum(), y2.cumsum(),'b.', markersize=0.05)
+
+        plt.title("Cumulative relative coverage")
+        plt.suptitle("p=%e, Rho=%e" % (self.pvals[tr], self.stats[tr]) )
+        plt.xlabel(self.f1.infile)
+        plt.ylabel(self.f2.infile)
+        self.report.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
+    def tr2cmp_gc_col(self, tr):
+        """ Plot cumulative coverage vectors against each other (with GC colors) """
+        seq = self.ref[tr]
+        y1  = self.f1.frag_vecs[tr].cumsum()
+        y2  = self.f2.frag_vecs[tr].cumsum()
+        x       = np.arange(len(y1))
+        col     = { 'A': 'b', 'T': 'b', 'G': 'r', 'C': 'r'}
+        fig = plt.figure()
+
+        blue_idx, red_idx = [], []
+
+        for i in xrange(len(y1)):
+            if col[seq[i]] == 'b':
+                blue_idx.append(i)
+            else:
+                red_idx.append(i)
+        blue_idx = np.array(blue_idx)
+        red_idx  = np.array(red_idx)
+
+        plt.plot(y1[blue_idx], y2[blue_idx], '.', color='b', markersize=0.05)
+        plt.plot(y1[red_idx], y2[red_idx], '.', color='r', markersize=0.05)
+
+        plt.title("Cumulative relative coverage")
+        plt.suptitle("p=%e, Rho=%e" % (self.pvals[tr], self.stats[tr]) )
+        plt.xlabel(self.f1.infile)
+        plt.ylabel(self.f2.infile)
+        self.report.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
+def pickle_results(args, el, cov):
+    if args.p is None:
+        return
+    tmp = {
+        'input_files': args.input_files,
+        'ref_fasta':   args.f,
+        'el_rho':      el.rho,
+        'el_pval':     el.p_val,
+        'cov_rhos':    cov.stats,
+        'cov_pvals':   cov.pvals
+    }
+    fh     = open(args.p, "w")
+    pickle = cPickle.Pickler( fh )
+    pickle.dump(tmp)
+    fh.flush()
+    fh.close()
+    
+
+args        = parse_arguments()
+log_level   = 1 if args.v else 0
+L           = Log(None, log_level)
+
+SI          = SingleIsoList(args.i, L)
+R           = Report(args.r)
+
+ref         = Fasta(args.f).slurp(SI, args.l)
+
+f1          = ParseFrags(args.input_files[0], ref, args.q, L)
+f1.parse_frags()
+
+f2          = ParseFrags(args.input_files[1], ref, args.q, L)
+f2.parse_frags()
+
+elcomp      = ExpLevelComp(f1, f2, R, L)
+cov_comp    = CovComp(ref, f1, f2, ref, elcomp.ctrs, args.t, args.g, L, R)
+
+pickle_results(args, elcomp, cov_comp)
+
+R.close()

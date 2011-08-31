@@ -1,21 +1,50 @@
 #!/usr/bin/env python
+#
+# Copyright (C) 2013 EMBL - European Bioinformatics Institute
+#
+# This program is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General
+# Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE. See the GNU General Public License
+# for more details.
+#
+# Neither the institution name nor the name rlsim
+# can be used to endorse or promote products derived from
+# this software without prior written permission. For
+# written permission, please contact <sbotond@ebi.ac.uk>.
 
-#
-# Script to sample expression levels.
-#
+# Products derived from this software may not be called
+# rlsim nor may rlsim appear in their
+# names without prior written permission of the developers.
+# You should have received a copy of the GNU General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
+VERSION="1.0"
 
 # Import external modules:
+import      matplotlib
+matplotlib.use('PDF')   # Necessary to prevent problems when DISPLAY is not set.
 import      sys
 import      re
 import      argparse
 import      numpy       as      np
+import      string
 from        Bio         import  SeqIO
+from        collections import  namedtuple
+from        collections import  defaultdict
+from        matplotlib                      import  pyplot          as  plt
+from        matplotlib.backends.backend_pdf import  PdfPages
 
 ##
 ## Globals:
 ##
-
-VERBOSE_MODE    = False
 
 ##
 ## Method definitions:
@@ -28,26 +57,96 @@ class MyError(Exception):
     def __str__(self):
         return repr(self.value)
 
-def vmsg(msg):
-    """ Print verbose message """
-    if VERBOSE_MODE:
-        print >>sys.stderr, msg
+class Report:
+    """ Class for plotting reports: """
+    def __init__(self, pdf):
+        self.pdf    = pdf
+        self.pages  = PdfPages(pdf)
+
+    def plot_levels(self, levels, title, bins=200):
+        fig = plt.figure()
+        plt.hist(levels,bins=bins)
+        plt.title(title)
+        self.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
+
+    def close(self):
+        self.pages.close()
+
+# Named tuple rperesenting a mixture componenet:
+MixComp = namedtuple('MixComp',['mean','shape','id'])
+
+def normalize_mix(m):
+    """ Normalize target mixture """
+    # Calculate the sum of proportions:
+    s   = sum(m.values())
+    tmp = { }
+    # Scale proportions:
+    for (k, v) in m.iteritems():
+        tmp[k] = v / s
+    return tmp
+
+def parse_target_mix(s):
+    """ Parse target mixture """
+    err_msg = "Invalid mixture!"
+    # Split mixture components:
+    s = re.split('\s*\+\s*', s, re.X)
+    if len(s) == 0:
+       sys.exit(err_msg)
+
+    mix     = { }
+    pattern = '\s*(\S+)\s* :\s*g \s*: \s*\( \s*(\S+)\s*, \s*(\S+)\s*\)\s*'
+    parser = re.compile(pattern, re.X)
+
+    # Parse mixture componenets:
+    for i in xrange(len(s)):
+        ms  = s[i]
+
+        m   = parser.match(ms)
+        if m is None:
+            sys.exit(err_msg)
+        g   = m.groups()
+
+        # Check for empty parameters:
+        for tmp in g:
+            if tmp is None:
+                sys.exit(err_msg)
+
+        # We need and id to make the components unique.
+        tmp = MixComp(
+                mean    = string.atof(g[1]),
+                shape   = string.atof(g[2]),
+                id      = i
+            )
+        mix[tmp] = float(g[0])
+
+    mix = normalize_mix(mix)
+    return mix
 
 def parse_arguments():
     """ Parse arguments and set verbose mode """
-    global VERBOSE_MODE
-    parser = argparse.ArgumentParser(description='Sample expression levels.')
-    parser.add_argument('input_fasta', metavar='input fasta file', type=str, nargs='?',default=None, help='Transcripts and expression levels in Fasta format.')
-    parser.add_argument('-v', action='store_true', default=True, help='Verbose mode.')
+    parser = argparse.ArgumentParser(description='Sample expression levels from a mixture of gamma distributions (version %s).' % VERSION)
+
+    parser.add_argument('input_fasta', metavar='input fasta file', type=str, nargs='?',default=None, 
+    help='Transcripts and expression levels in Fasta format.')
+
     parser.add_argument('-t', action='store_true', default=True, help='Trim sequence names.')
-    parser.add_argument('-m', metavar='dist_param', type=str, default="flux|x0:10000, k:2, x1:100", help='Fragment size distribution.')
+
+    parser.add_argument('-d', metavar='dist_param', type=str, default="0.5:g:(5e3,0.5) + 0.5:g:(5e4,1000)", help='Expression level distribution.')
+
+    parser.add_argument('-b', metavar='nr_bins', type=int, default=200, help='Number of bins in histogram.')
+ 
+    parser.add_argument('-r', metavar='report_fil', type=str, default="sel_report.pdf", help='Report PDF file.')
+    
+
     args            = parser.parse_args()
-    # Set verbose mode:
-    VERBOSE_MODE    = args.v
     # Check method string:
-    m   = args.m.strip()
-    if m == "":
-        raise MyError("Invalid method string: %s" % args.m)
+    d               = args.d.strip()
+    if d == "":
+        raise MyError("Invalid mixture: %s" % args.d)
+    args.target_mix =  parse_target_mix(args.d)
     return args
 
 def get_input_fh(input_file):
@@ -66,54 +165,71 @@ def slurp_sequences(args):
     """ Store all input sequences as a list of tupples """
     sequences = [ ]
     fh      = get_input_fh(args.input_fasta)
-    siter   = get_input_iter(fh)   
+    siter   = get_input_iter(fh) 
     for s in siter:
+        name = s.name.split('$')[0]
         if args.t:
-            name = s.name.strip()
-        else:
-            name = s.name
+            name = name.strip()
         sequences.append( (name,str(s.seq)) )
+    if len(sequences) == 0:
+        print >>os.stderr, "No transcripts given, exiting!"
+        os.exit(0)
     return sequences
 
-def sample_expr_levels(trs, meth_string):
-    """ Sample expression levels using a given method and parameters """
-    # Parse method string:
-    tmp  = meth_string.split('$')
-    if len(tmp) != 2:
-        raise MyError("Invalid method string: %s" % meth_string)
-    (method, pars) = tmp
-    if method == 'flux':
-        return sample_expr_flux(trs, pars)
+def sample_key(h):
+    """ Randomly sample a key proportional to the values """
+    keys    = h.keys()
+    val     = h.values()
+    if len(keys) == 0:
+        return None
+    p       = np.array(val, dtype=float)
+    p       = p.cumsum()
+    if p[-1] == 0.0:
+        return None
+    u   = np.random.uniform(low=0.0, high=float(p[-1]))
+    ind = p.searchsorted(u, side='left')
+    return keys[ind]
 
-# The flux simulator method for sampling expression levels:
-def parse_params_flux(params):
-    p = { 'x0': None, 'k': None, 'x1': None}
-    pattern = '\s*,?\s*(\S+)\s* : \s*(\S+)\s*'
-    parser = re.compile(pattern, re.X)
-    # Iterate over parameters:
-    for m in parser.finditer(params):
-        g   = m.groups()
-        if not p.has_key(g[0]):
-            raise MyError("Invalid parameter: %s:%s" % g )
-        p[g[0]] = g[1]
-    # Check if no parameter is missing:
-    for (k, v) in p.iteritems():
-        if v == None:
-            raise MyError("Missing parameter: %s" % k)
-    return p
-def sample_expr_flux(trs, params):
-    p   = parse_params_flux(params)
-    print p
-    
+def rgamma(mean, shape):
+    m   = mean / shape
+    return int( np.random.gamma(scale=m, shape=shape, size=1) )
+
+def sample_level(tg):
+    # Sample mixture component:
+    d = sample_key(tg)
+    # Sample expression level:
+    return rgamma(d.mean, d.shape)
+
+def sample_expr_levels(trs, tg):
+    l       = len(trs) 
+    levels  = np.zeros((l))
+    for i in xrange(l):
+        level           = sample_level(tg)
+        levels[i]       = level
+    return levels
+
+def report_levels(trs, levels):
+    for i in xrange(len(trs)):
+        print ">%s$%d\n%s\n" % (trs[i][0],levels[i],trs[i][1])
+
 ##
 ## Main section:
 ##
 
 # Parse command line arguments:
-args        = parse_arguments()
+args            = parse_arguments()
 
 # Load transcripts:
-transcripts = slurp_sequences( args )
+transcripts     = slurp_sequences( args )
 
 # Sample expression levels:
-levels      = sample_expr_levels(transcripts, args.m)
+levels = sample_expr_levels(transcripts, args.target_mix)
+
+# Print out sequences:
+report_levels(transcripts, levels)
+
+# Report expression levels:
+report = Report(args.r)
+report.plot_levels(levels,"Distribution of expression levels", args.b)
+report.close()
+

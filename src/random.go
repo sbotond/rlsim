@@ -1,45 +1,55 @@
 /*
- *  Copyright (C) 2011 by Botond Sipos, European Bioinformatics Institute
- *  sbotond@ebi.ac.uk
- *
- *  This file is part of the rlsim software for simulating RNA-seq
- *  library preparation with PCR biases and size selection.
- *
- *  rlsim is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  rlsim is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with rlsim.  If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2013 EMBL - European Bioinformatics Institute
+*
+* This program is free software: you can redistribute it
+* and/or modify it under the terms of the GNU General
+* Public License as published by the Free Software
+* Foundation, either version 3 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be
+* useful, but WITHOUT ANY WARRANTY; without even the
+* implied warranty of MERCHANTABILITY or FITNESS FOR A
+* PARTICULAR PURPOSE. See the GNU General Public License
+* for more details.
+*
+* Neither the institution name nor the name rlsim
+* can be used to endorse or promote products derived from
+* this software without prior written permission. For
+* written permission, please contact <sbotond@ebi.ac.uk>.
+
+* Products derived from this software may not be called
+* rlsim nor may rlsim appear in their
+* names without prior written permission of the developers.
+* You should have received a copy of the GNU General Public
+* License along with this program. If not, see
+* <http://www.gnu.org/licenses/>.
+*/
 
 package main
 
 import (
-	"rand"
-	"math"
-	"time"
-	"os"
 	"fmt"
+	"math"
+	"math/rand"
+	"os"
+	"time"
 )
 
 type Rander interface {
 	Split() Rander
 	Int63() int64
 	Int63n(n int64) int64
+	Int31n(n int32) int32
 	Float64() float64
 	Float64f(max float64) float64
 	NormFloat64() float64
 	NormFloat64p(mean float64, sd float64) float64
 	Poisson(xm float64) int32
 	Binomial(n uint64, p float64) uint64
-	TruncNormUint64(mean uint64, sd uint64, low uint64, high uint64) uint64
+	TruncNormUint32(mean float64, sd float64, low uint64, high uint64) uint32
+	TruncSNormUint32(loc float64, scale float64, shape float64, low, high uint64) uint32
+	TruncGammaUint32(loc float64, shape float64, low uint64, high uint64) uint32
 	SampleIndexUint64(p []uint64) (ind uint64, ok bool)
 	SampleIndexFloat64(p []float64) (ind uint64, ok bool)
 	ExpFloat64(x float64) float64
@@ -77,6 +87,10 @@ func (rg RandGen) Int63() int64 {
 
 func (rg RandGen) Int63n(n int64) int64 {
 	return rg.rand.Int63n(n)
+}
+
+func (rg RandGen) Int31n(n int32) int32 {
+	return rg.rand.Int31n(n)
 }
 
 func (rg RandGen) Float64() float64 {
@@ -148,7 +162,7 @@ func (rg RandGen) Poisson(xm float64) int32 {
 	return 0
 }
 
-// Generate Binomila random variates.
+// Generate Binomial random variates.
 // Algorithm after Press, WH; Teukolsky, SA; Vetterling, WT; Flannery, BP:
 // Numerical Recipes in C. The Art of Scientific Computing
 func (rg RandGen) Binomial(n uint64, pp float64) uint64 {
@@ -218,7 +232,7 @@ func (rg RandGen) Binomial(n uint64, pp float64) uint64 {
 	return bnl
 }
 
-func (rg RandGen) TruncNormUint64(mean uint64, sd uint64, low uint64, high uint64) uint64 {
+func (rg RandGen) TruncNormUint32(mean float64, sd float64, low uint64, high uint64) uint32 {
 	// FIXME
 	h := float64(high)
 	l := float64(low)
@@ -229,7 +243,127 @@ func (rg RandGen) TruncNormUint64(mean uint64, sd uint64, low uint64, high uint6
 	for uf < l || uf > h {
 		uf = rg.NormFloat64()*float64(sd) + float64(mean)
 	}
-	return uint64(uf)
+	return uint32(uf)
+}
+
+// Random draw from standardised skew-normal distribution
+func (rg RandGen) SNormStdFloat64(shape float64) float64 {
+
+	u1 := rg.NormFloat64()
+	u2 := rg.NormFloat64()
+	if u2 > shape*u1 {
+		u1 = -u1
+	}
+	return u1
+}
+
+// Random draw from skew-normal distribution
+func (rg RandGen) SNormUint64(location, scale, shape float64) uint64 {
+	if scale <= 0.0 {
+		panic("Illegal parameter. Scale must be positive")
+	}
+
+	return uint64(location + scale*rg.SNormStdFloat64(shape))
+}
+
+// Random draw from truncated skew-normal distribution
+func (rg RandGen) TruncSNormUint32(loc float64, scale float64, shape float64, low, high uint64) uint32 {
+	u := rg.SNormUint64(float64(loc), float64(scale), float64(shape))
+	for u < low || u > high {
+		u = rg.SNormUint64(float64(loc), float64(scale), float64(shape))
+	}
+	return uint32(u)
+}
+
+// Code for generating gamma distributed random variates (by Tim Massingham).
+
+// Random gamma variable when shape>1
+// See Knuth V2, 3.41.
+func (rg RandGen) rgamma1(shape float64) float64 {
+	if shape < 1.0 {
+		panic("Illegal parameter. Shape must greater than one")
+	}
+	shm1 := shape - 1.0
+	sh2m1 := math.Sqrt(2.0*shape - 1.0)
+start:
+	y := math.Tan(math.Pi * rg.Float64())
+	x := sh2m1*y + shm1
+
+	if x <= 0.0 {
+		goto start
+	}
+
+	v := rg.Float64()
+	if v > (1.0+y*y)*math.Exp(shm1*math.Log(x/shm1)-sh2m1*y) {
+		goto start
+	}
+
+	return x
+}
+
+// Random gamma variable when shape<1
+// See Kundu and Gupta 2007
+// "A convenient way of generating gamma random variables using generalized exponential distribution"
+func (rg RandGen) rgamma2(shape float64) float64 {
+	if shape <= 0.0 || shape >= 1.0 {
+		panic("Illegal parameter. Shape must be positive and no greater than one")
+	}
+
+	d := 1.0334 - 0.0766*math.Exp(2.2942*shape) // Constants from paper
+	a := math.Exp2(shape) * math.Pow(-math.Expm1(-d/2), shape)
+	pdsh := math.Pow(d, shape-1.0)
+	b := shape * pdsh * math.Exp(-d)
+	c := a + b
+
+start:
+	u := rg.Float64()
+	var x float64
+	if u <= a/c {
+		x = -2.0 * math.Log1p(-math.Pow(c*u, 1.0/shape)/2.0)
+	} else {
+		x = -math.Log(c * (1.0 - u) / (shape * pdsh))
+	}
+	v := rg.Float64()
+	if x <= d {
+		p := math.Pow(x, shape-1.0) * math.Exp(-x/2.0) / (math.Exp2(shape-1.0) * math.Pow(-math.Expm1(-x/2.0), shape-1.0))
+		if v > p {
+			goto start
+		}
+	} else {
+		if v > math.Pow(d/x, 1.0-shape) {
+			goto start
+		}
+	}
+
+	return x
+}
+
+// Random draw from gamma distribution
+func (rg RandGen) Rgamma(shape, loc float64) float64 {
+	switch {
+	case shape <= 0.0:
+		panic("Illegal parameter. Shape must be positive")
+	case loc <= 0.0:
+		panic("Illegal parameter. Scale must be positive")
+	case shape == 1.0:
+		return (loc / shape) * rg.rand.ExpFloat64()
+	case shape > 1.0:
+		return (loc / shape) * rg.rgamma1(shape)
+	case shape < 1.0:
+		return (loc / shape) * rg.rgamma2(shape)
+	}
+	panic("Unreachable")
+	return math.NaN()
+}
+
+func (rg RandGen) TruncGammaUint32(loc float64, shape float64, low uint64, high uint64) uint32 {
+	l := float64(low)
+	h := float64(high)
+	u := rg.Rgamma(shape, loc)
+	for u < l || u > h {
+		u = rg.Rgamma(shape, loc)
+	}
+	return uint32(u)
 }
 
 func (rg RandGen) SampleIndexFloat64(p []float64) (ind uint64, ok bool) {
@@ -346,14 +480,14 @@ func (rg RandGen) ExpFloat64(x float64) float64 {
 
 // Generate random numbers for testing purposes.
 func RandTest() {
-	time := time.UTC()
-	Rg = NewRandGen(time.Seconds())
+	time := time.Now().UTC()
+	Rg = NewRandGen(time.Unix())
 	const n = 200000
 
 	// Poisson with mean 10:
 	f, e := os.Create("poisson_10.tab")
 	if e != nil {
-		L.Fatalf("Cannot create output file: %s", e.String())
+		L.Fatalf("Cannot create output file: %s", e.Error())
 	}
 	defer f.Close()
 	for i := 0; i < n; i++ {
@@ -364,7 +498,7 @@ func RandTest() {
 	// Poisson with mean 100:
 	f, e = os.Create("poisson_100.tab")
 	if e != nil {
-		L.Fatalf("Cannot create output file: %s", e.String())
+		L.Fatalf("Cannot create output file: %s", e.Error())
 	}
 	defer f.Close()
 	for i := 0; i < n; i++ {
@@ -375,7 +509,7 @@ func RandTest() {
 	// Binomial n = 20, p = 0.3:
 	f, e = os.Create("binomial_20_0.3.tab")
 	if e != nil {
-		L.Fatalf("Cannot create output file: %s", e.String())
+		L.Fatalf("Cannot create output file: %s", e.Error())
 	}
 	defer f.Close()
 	for i := 0; i < n; i++ {
@@ -386,7 +520,7 @@ func RandTest() {
 	// Binomial n = 1000, p = 0.51:
 	f, e = os.Create("binomial_1000_0.75.tab")
 	if e != nil {
-		L.Fatalf("Cannot create output file: %s", e.String())
+		L.Fatalf("Cannot create output file: %s", e.Error())
 	}
 	defer f.Close()
 	for i := 0; i < n; i++ {
@@ -397,7 +531,7 @@ func RandTest() {
 	// Binomial n = 1000, p = 0.75:
 	f, e = os.Create("binomial_1000_0.75.tab")
 	if e != nil {
-		L.Fatalf("Cannot create output file: %s", e.String())
+		L.Fatalf("Cannot create output file: %s", e.Error())
 	}
 	defer f.Close()
 	for i := 0; i < n; i++ {

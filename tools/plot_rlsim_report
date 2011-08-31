@@ -1,15 +1,45 @@
 #!/usr/bin/env python
+#
+# Copyright (C) 2013 EMBL - European Bioinformatics Institute
+#
+# This program is free software: you can redistribute it
+# and/or modify it under the terms of the GNU General
+# Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# This program is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE. See the GNU General Public License
+# for more details.
+#
+# Neither the institution name nor the name rlsim
+# can be used to endorse or promote products derived from
+# this software without prior written permission. For
+# written permission, please contact <sbotond@ebi.ac.uk>.
+
+# Products derived from this software may not be called
+# rlsim nor may rlsim appear in their
+# names without prior written permission of the developers.
+# You should have received a copy of the GNU General Public
+# License along with this program. If not, see
+# <http://www.gnu.org/licenses/>.
+
+VERSION="1.0"
 
 #
 # Script to plot rlsim reports.
 #
-
+import      matplotlib
+matplotlib.use('PDF')
 import      argparse
 import      re
 from        matplotlib                      import  pyplot          as  plt
-from        collections                     import  defaultdict
+from        collections                     import  defaultdict, OrderedDict
 from        matplotlib.backends.backend_pdf import  PdfPages
 import      numpy                           as      np
+import      json
 
 # Exception class:
 class MyError(Exception):
@@ -20,8 +50,8 @@ class MyError(Exception):
 
 # Function for parsing command line arguments:
 def parse_arguments():
-    parser  = argparse.ArgumentParser(description='Plot rlsim report.')
-    parser.add_argument('input_file', metavar='input file', type=str, nargs='?',default='rlsim_report.tab', help='rlsim report file.')
+    parser  = argparse.ArgumentParser(description='Plot rlsim report (version %s).' % VERSION)
+    parser.add_argument('input_file', metavar='input file', type=str, nargs='?',default='rlsim_report.json', help='rlsim report file.')
     args    = parser.parse_args()
     return args
 
@@ -36,6 +66,13 @@ class PDFReport:
 
     def plot_hash_line(self, x, y, fig):
         plt.plot(x, y,'b-')
+
+    def plot_hash_hist(self, x, y, fig):
+        tmp = [ ]
+        for i in xrange(len(x)):
+            for j in xrange(int(y[i])):
+                tmp.append( x[i])
+        plt.hist(x,bins=200)
 
     def plot_hash(self, h, title, xl, yl, vis):
         # Create figure:
@@ -52,22 +89,35 @@ class PDFReport:
             self.plot_hash_bar(x, y, fig)
         elif vis == "line":
             self.plot_hash_line(x, y, fig)
+        elif vis == "hist":
+            self.plot_hash_hist(x, y, fig)
         else:
             raise MyError("Invalid visual!")
         plt.title(title)
         plt.xlabel(xl)
         plt.ylabel(yl)
         self.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
 
     def plot_panel(self, panel):
         self.plot_hash(panel.h, panel.title, panel.xl, panel.yl, panel.vis)
 
+    def plot_contour(self, z, title="", xl="", yl="",ymin=0):
+        fig = plt.figure()
+        p = plt.contourf(z)
+        plt.ylim(ymin=ymin)
+        plt.colorbar(p, orientation='vertical')
+        plt.xlabel(xl)
+        plt.ylabel(yl)
+        plt.title(title)
+        self.pages.savefig(fig)
+        plt.clf()
+        plt.close(fig)
+
     def close(self):
         self.pages.close()
-
-    def __del__(self):
-        self.close()
-
 
 # Class for a single report panel:
 class Panel:
@@ -83,55 +133,56 @@ class Panel:
         s   = "Title: %s x: %s y: %s vis: %s" % (self.title, self.xl, self.yl, self.vis)
         return s
 
-# Parse file and yield report sections:
-def parse_into_sections(fh):
-    lines = [ ]
-    # Iterate over lines:
-    for line in fh:
-        # Remove all whitespace:
-        line    = line.strip()
-        # Skip empty lines:
-        if line == "":
-            continue
-        elif line.startswith('# Title: '):
-            # yield previous section:
-            if len(lines) > 0:
-                tmp = list(lines)
-                # Reset lines buffer:
-                lines = [ line ]
-                yield tmp
-            else:
-                lines.append(line)
-            
-        else:
-            # Add line to buffer:
-            lines.append(line)
-    yield lines
+# Sanitize data:
+def json_to_dict(js):
+    tmp = {}
+    for k, v in js.iteritems():
+        tmp[float(k)] = float(v)
+    return tmp
 
-# Parse title line:
-def parse_title(line):
-    return line.split('# Title: ')[1]
-
-# Parse legend line:
-def parse_legend(line):
-    dummy, xl, yl, vis = line.split("\t")
-    return (xl, yl, vis)
-        
 # Parse report and yield panels:
 def parse_report(infile):
     fh      = open(infile, "r")
-    for section in parse_into_sections(fh):
+    tmp     = json.load(fh)
+    for title, rest in tmp.iteritems():
         panel       = Panel()
-        # Parse title:
-        panel.title = parse_title(section.pop(0)) 
-        # Parse legend line:
-        panel.xl, panel.yl, panel.vis = \
-        parse_legend(section.pop(0))
-        # Parse (x,y) points:
-        for line in section:
-            x, y = line.split("\t")
-            panel.h[float(x)] = float(y)
-        yield panel 
+        panel.title = str(title)
+        panel.vis   = str(rest['Vis'])
+        panel.xl    = str(rest['Xl'])
+        panel.yl    = str(rest['Yl'])
+        panel.pos    = int(rest['Pos'])
+        panel.h     = json_to_dict(rest['Data']) 
+        yield panel
+
+def plot_joint_eff(panels, report):
+    gc = None
+    has_gc, has_len = True, True
+    for p in panels:
+        if p.title.strip() == "GC efficiency function":
+            gc = p.h
+            break
+    else:
+        has_gc = False
+
+    size = None
+    for p in panels:
+        if p.title.strip() == "Length efficiency function":
+            size = p.h
+            break
+    else:
+        has_len = True
+
+    if has_len and has_gc:
+        max_gc      =   100
+        max_size    =   int( max(size.keys()) )
+        min_size    =   int( min(size.keys()) )
+        z           =   np.zeros((max_size+1, max_gc+1),dtype=float)
+        for i in xrange(min_size,max_size+1):
+            for j in xrange(max_gc+1):
+                ii          = float(i)
+                jj          = float(j)
+                z[ii][jj]   = float(size[i]) * float(gc[j]) * 100
+        report.plot_contour(z, title="Joint efficiency function", xl="GC content", yl="Fragment size",ymin=min_size) 
 
 ##
 ## main section:
@@ -144,6 +195,15 @@ args    = parse_arguments()
 report  = PDFReport(args.input_file + ".pdf")
 
 # Parse and plot report:
+panels = [ ]
 for panel in parse_report(args.input_file):
+    panels.append(panel)
+
+for panel in sorted(panels, key=lambda x:x.pos):
     report.plot_panel(panel)
+
+# Plot joint efficiency function:
+plot_joint_eff(panels, report)
+
+report.close()
 

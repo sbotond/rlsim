@@ -1,44 +1,58 @@
 /*
- *  Copyright (C) 2011 by Botond Sipos, European Bioinformatics Institute
- *  sbotond@ebi.ac.uk
- *
- *  This file is part of the rlsim software for simulating RNA-seq
- *  library preparation with PCR biases and size selection.
- *
- *  rlsim is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
- *
- *  rlsim is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with rlsim.  If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2013 EMBL - European Bioinformatics Institute
+*
+* This program is free software: you can redistribute it
+* and/or modify it under the terms of the GNU General
+* Public License as published by the Free Software
+* Foundation, either version 3 of the License, or (at your
+* option) any later version.
+*
+* This program is distributed in the hope that it will be
+* useful, but WITHOUT ANY WARRANTY; without even the
+* implied warranty of MERCHANTABILITY or FITNESS FOR A
+* PARTICULAR PURPOSE. See the GNU General Public License
+* for more details.
+*
+* Neither the institution name nor the name rlsim
+* can be used to endorse or promote products derived from
+* this software without prior written permission. For
+* written permission, please contact <sbotond@ebi.ac.uk>.
+
+* Products derived from this software may not be called
+* rlsim nor may rlsim appear in their
+* names without prior written permission of the developers.
+* You should have received a copy of the GNU General Public
+* License along with this program. If not, see
+* <http://www.gnu.org/licenses/>.
+*/
 
 package main
 
 import "sort"
 
 type Fragmentor interface {
-	Fragment(tr Transcripter, bindProf BindingProfile, polyAend int, st FragStater, rand Rander)
-	GetBindingProfile(tr Transcripter) BindingProfile
+	Fragment(tr Transcripter, bindProfs *BindingProfiles, polyAend int, st FragStater, rand Rander)
+	GetBindingProfiles(tr Transcripter) *BindingProfiles
 	JettisonPrimerCache()
 }
 
-func NewFragmentor(method *FragMethod, primingBias float64, kmerLength uint32, tg Targeter) Fragmentor {
+func NewFragmentor(method *FragMethod, primingTemp float64, kmerLength uint32, tg Targeter, fragLossProb float64) Fragmentor {
 	var fg Fragmentor
+	fragFilter := NewFragFilter(fragLossProb)
 	L.PrintfV("Fragmentation method: \"%s\" with parameter %d.", method.Name, method.Param)
 	switch method.Name {
 	case "after_prim":
-		fg = NewFragAfterPrim(uint32(method.Param), primingBias, kmerLength, tg)
+		fg = NewFragAfterPrim(uint32(method.Param), primingTemp, kmerLength, tg, fragFilter, true, false)
+	case "after_prim_double":
+		fg = NewFragAfterPrim(uint32(method.Param), primingTemp, kmerLength, tg, fragFilter, true, true)
+	case "after_noprim":
+		fg = NewFragAfterPrim(uint32(method.Param), primingTemp, kmerLength, tg, fragFilter, false, false)
+	case "after_noprim_double":
+		fg = NewFragAfterPrim(uint32(method.Param), primingTemp, kmerLength, tg, fragFilter, false, true)
 	case "pre_prim":
-		fg = NewFragPrePrim(uint32(method.Param), primingBias, kmerLength, tg)
+		fg = NewFragPrePrim(uint32(method.Param), primingTemp, kmerLength, tg, fragFilter)
 	case "prim_jump":
-		fg = NewFragPrimJump(uint32(method.Param), primingBias, kmerLength, tg)
+		fg = NewFragPrimJump(uint32(method.Param), primingTemp, kmerLength, tg, fragFilter)
 	default:
 		L.Fatal("Invalid fragmentation method.")
 	}
@@ -47,26 +61,38 @@ func NewFragmentor(method *FragMethod, primingBias float64, kmerLength uint32, t
 
 // Fragmentation method: after_prim
 type FragAfterPrim struct {
-	primingBias float64
+	primingTemp float64
+	simPriming  bool
+	doublePrime bool
 	target      Targeter
 	primer      Primer
 	fragParam   uint32
+	fragFilter  FragFilter
 }
 
-func NewFragAfterPrim(fragParam uint32, pbias float64, kmerLength uint32, tg Targeter) *FragAfterPrim {
+func NewFragAfterPrim(fragParam uint32, pbias float64, kmerLength uint32, tg Targeter, fragFilter FragFilter, simPriming bool, doublePrime bool) *FragAfterPrim {
 	fr := new(FragAfterPrim)
-	fr.primingBias = pbias
+	fr.simPriming = simPriming
+	fr.doublePrime = doublePrime
+	fr.primingTemp = pbias
 	fr.target = tg
 	fr.primer = NewNNthermo(pbias, kmerLength)
 	fr.fragParam = uint32(fragParam)
+	fr.fragFilter = fragFilter
 	return fr
 }
 
-func (fr FragAfterPrim) GetBindingProfile(tr Transcripter) BindingProfile {
-	return fr.primer.GetBindingProfile(tr)
+func (fr FragAfterPrim) GetBindingProfiles(tr Transcripter) *BindingProfiles {
+	if !fr.simPriming {
+		return nil
+	}
+	if fr.doublePrime {
+		return fr.primer.GetBindingProfiles(tr, true)
+	}
+	return fr.primer.GetBindingProfiles(tr, false)
 }
 
-func (fr FragAfterPrim) Fragment(tr Transcripter, bindProf BindingProfile, polyAend int, st FragStater, rand Rander) {
+func (fr FragAfterPrim) Fragment(tr Transcripter, bindProfs *BindingProfiles, polyAend int, st FragStater, rand Rander) {
 	// Sample mixture component:
 	d := fr.target.SampleMixComp(rand)
 
@@ -78,13 +104,14 @@ func (fr FragAfterPrim) Fragment(tr Transcripter, bindProf BindingProfile, polyA
 	// Calculate Poisson rate:
 	var rate float64
 	if fr.fragParam == 0 {
-		rate = (float64(length) / float64(d.Mean)) / 2.0 // Double mean.
+		rate_scaler := 2.0
+		rate = (float64(length) / float64(d.Location)) / rate_scaler // Multiply produced mean fragment length.
 	} else {
 		rate = float64(length) / float64(fr.fragParam)
 	}
 
 	// Sample the number of breakpoints:
-	nrBreaks := Rg.Poisson(rate) - 1
+	nrBreaks := rand.Poisson(rate) - 1
 	if nrBreaks <= 0 {
 		nrBreaks = 1
 	}
@@ -111,11 +138,33 @@ FRAG:
 		}
 
 		// Simulate priming:
-		new_start := fr.primer.SimulatePriming(bindProf, start, end, rand)
+		var new_start uint32
+		if fr.simPriming {
+			// Use binding energies to select fragment start:
+			new_start = fr.primer.SimulatePriming(bindProfs.Forward, start, end, rand)
+			// Select end by priming simulation as well:
+			if fr.doublePrime {
+				final := uint32(tr.GetLen() - 1)                   // needed for coordinate transformation.
+				s, e := (final - end + 1), (final - new_start + 1) // "reverse complement" coordinates.
+				ns := fr.primer.SimulatePriming(bindProfs.Reverse, s, e, rand)
+				end = final - ns + 1 // "reverse complement" coordinates.
+			}
+		} else {
+			// Do not use binding energies:
+			new_start = start + uint32(rand.Int31n(int32(end-start)))
+			if fr.doublePrime {
+				end = new_start + uint32(rand.Int31n(int32(end-new_start)))
+			}
+		}
 		size := (end - new_start)
 
 		//Filter out too long or too short fragments:
 		if size < low || size > high {
+			continue FRAG
+		}
+
+		// Simulate fragment loss:
+		if fr.fragFilter.Filter(rand) == false {
 			continue FRAG
 		}
 
@@ -132,31 +181,34 @@ func (fg FragAfterPrim) JettisonPrimerCache() {
 
 // Fragmentation method: pre_prim
 type FragPrePrim struct {
-	primingBias float64
+	primingTemp float64
 	target      Targeter
 	primer      Primer
 	fragParam   float64
+	fragFilter  FragFilter
 }
 
-func NewFragPrePrim(fragParam uint32, pbias float64, kmerLength uint32, tg Targeter) *FragPrePrim {
+func NewFragPrePrim(fragParam uint32, pbias float64, kmerLength uint32, tg Targeter, fragFilter FragFilter) *FragPrePrim {
 	fr := new(FragPrePrim)
-	fr.primingBias = pbias
+	fr.primingTemp = pbias
 	fr.target = tg
 	fr.primer = NewNNthermo(pbias, kmerLength)
 	fr.fragParam = (1.0 / float64(fragParam))
+	fr.fragFilter = fragFilter
 	return fr
 }
 
-func (fr FragPrePrim) GetBindingProfile(tr Transcripter) BindingProfile {
-	return fr.primer.GetBindingProfile(tr)
+func (fr FragPrePrim) GetBindingProfiles(tr Transcripter) *BindingProfiles {
+	return nil
 }
 
-func (fr FragPrePrim) Fragment(tr Transcripter, bindProf BindingProfile, polyAend int, st FragStater, rand Rander) {
+func (fr FragPrePrim) Fragment(tr Transcripter, bindProfs *BindingProfiles, polyAend int, st FragStater, rand Rander) {
 	// Sample mixture component:
 	d := fr.target.SampleMixComp(rand)
 
 	// Define length based on polyAend:
 	length := polyAend
+
 	// Get the boundaries:
 	low := uint32(fr.target.GetLow())
 	high := uint32(fr.target.GetHigh())
@@ -169,10 +221,10 @@ func (fr FragPrePrim) Fragment(tr Transcripter, bindProf BindingProfile, polyAen
 	elong = int(length) - elong
 
 	// Caluclate Poisson rate for fragmentation:
-	rate := (float64(length) / float64(d.Mean))
+	rate := (float64(length) / float64(d.Location))
 
 	// Sample the number of breakpoints:
-	nrBreaks := Rg.Poisson(rate) - 1
+	nrBreaks := rand.Poisson(rate) - 1
 	if nrBreaks <= 0 {
 		nrBreaks = 1
 	}
@@ -184,7 +236,12 @@ func (fr FragPrePrim) Fragment(tr Transcripter, bindProf BindingProfile, polyAen
 
 	// Sample breakpoints
 	for i := int32(0); i < nrBreaks; i++ {
-		breaks[i+2] = elong + int(rand.Int63n(int64(length)-int64(elong)))
+		len_tmp := int64(length) - int64(elong)
+		// Return if priming event is too close to start:
+		if len_tmp < 1 {
+			return
+		}
+		breaks[i+2] = elong + int(rand.Int63n(len_tmp))
 	}
 
 	breaks.Sort()
@@ -197,6 +254,11 @@ FRAG:
 
 		//Filter out too long or too short fragments:
 		if size < low || size > high {
+			continue FRAG
+		}
+
+		// Simulate fragment loss:
+		if fr.fragFilter.Filter(rand) == false {
 			continue FRAG
 		}
 
@@ -213,34 +275,36 @@ func (fg FragPrePrim) JettisonPrimerCache() {
 
 // Fragmentation method: prim_jump
 type FragPrimJump struct {
-	primingBias float64
+	primingTemp float64
 	target      Targeter
 	primer      Primer
 	fragParam   float64
 	kmerLength  uint32
+	fragFilter  FragFilter
 }
 
-func NewFragPrimJump(fragParam uint32, pbias float64, kmerLength uint32, tg Targeter) *FragPrimJump {
+func NewFragPrimJump(fragParam uint32, pbias float64, kmerLength uint32, tg Targeter, fragFilter FragFilter) *FragPrimJump {
 	fr := new(FragPrimJump)
-	fr.primingBias = pbias
+	fr.primingTemp = pbias
 	fr.target = tg
 	fr.primer = NewNNthermo(pbias, kmerLength)
 	if fragParam != 0 {
 		fr.fragParam = (1.0 / float64(fragParam))
 	}
 	fr.kmerLength = kmerLength
+	fr.fragFilter = fragFilter
 	return fr
 }
 
-func (fr FragPrimJump) GetBindingProfile(tr Transcripter) BindingProfile {
-	return fr.primer.GetBindingProfile(tr)
+func (fr FragPrimJump) GetBindingProfiles(tr Transcripter) *BindingProfiles {
+	return fr.primer.GetBindingProfiles(tr, false)
 }
 
-func (fr FragPrimJump) Fragment(tr Transcripter, bindProf BindingProfile, polyAend int, st FragStater, rand Rander) {
+func (fr FragPrimJump) Fragment(tr Transcripter, bindProfs *BindingProfiles, polyAend int, st FragStater, rand Rander) {
 	var start, end, new_end uint32
 
 	// Define final base based on polyAend:
-	ltmp := int(tr.GetLen()) - len(bindProf)
+	ltmp := int(tr.GetLen()) - len(bindProfs.Forward)
 	final := uint32(polyAend - ltmp)
 
 	// Get the boundaries:
@@ -250,7 +314,7 @@ func (fr FragPrimJump) Fragment(tr Transcripter, bindProf BindingProfile, polyAe
 FRAG:
 	for end < final {
 		// Simulate priming:
-		start = fr.primer.SimulatePriming(bindProf, end, final, rand)
+		start = fr.primer.SimulatePriming(bindProfs.Forward, end, final, rand)
 
 		// Sample fragment length:
 		if fr.fragParam != 0.0 {
@@ -269,6 +333,11 @@ FRAG:
 
 		//Filter out too long or too short fragments:
 		if size < low || size > high {
+			continue FRAG
+		}
+
+		// Simulate fragment loss:
+		if fr.fragFilter.Filter(rand) == false {
 			continue FRAG
 		}
 
