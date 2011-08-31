@@ -109,6 +109,10 @@ func (input Input) GetTranscriptChan(tmpDir string, polyAmax int) (c chan *Trans
 			if !ok {
 				continue
 			}
+			// Skip transcripts with zero expression level:
+			if level == 0 {
+				continue
+			}
 			tr := NewTranscript(name, seq.Seq, level, polyAmax, tmpDir)
 			c <- tr
 		}
