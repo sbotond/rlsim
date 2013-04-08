@@ -1,7 +1,7 @@
 `rlsim` - a package for simulating RNA-seq library preparation with parameter estimation
 ========================================================================================
 
-![rlsim architecture](http://www.ebi.ac.uk/~sbotond/rlsim_main.png)
+![rlsim architecture](https://raw.github.com/sbotond/rlsim/master/doc/pix/rlsim_main.png)
 
 What is the `rlsim` package?
 --------------------------
