@@ -38,7 +38,7 @@ be cited as:
  - *[Botond Sipos](http://sbotond.github.io), Tim Massingham and Nick Goldman (2013): rlsim - a
 package for simulating RNA-seq library preparation with parameter estimation.* [http://bit.ly/rlsim-doc](http://bit.ly/rlsim-doc)
 
-`rlsim` was brought to you by the [Goldman group](http://www.ebi.ac.uk/goldman) from [EMBL-EBI](http://www.ebi.ac.uk).
+`rlsim` was brought to you by the [Goldman group](http://www.ebi.ac.uk/research/goldman) from [EMBL-EBI](http://www.ebi.ac.uk).
 
 Key features
 ------------
