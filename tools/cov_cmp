@@ -157,7 +157,7 @@ class SingleIsoList:
             for i in xrange(len(self.trs)):
                 self.trs[i] = self.trs[i].rstrip()
             self.have_list = True
-            self.log.vlog("Number of single isoform transcripts specified: %d" % self.size() )
+            self.log.log("Number of single isoform transcripts specified: %d" % self.size() )
 
 
     def single_isoform(self, name):
