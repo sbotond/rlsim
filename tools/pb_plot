@@ -40,6 +40,7 @@ from        matplotlib.backends.backend_pdf import  PdfPages
 import      string
 import      warnings
 import      cPickle
+import      time
 
 ##
 ## Functions and classes:
@@ -54,6 +55,7 @@ def parse_arguments():
     parser.add_argument('-f', metavar='ref_fasta', type=str, default="", help='Reference sequences in fasta format.')
     parser.add_argument('-r', metavar='report_file', type=str, default="pb_plot.pdf", help='Name of PDF report file.')
     parser.add_argument('-w', metavar='winsize', type=int, default=10, help='Window size.')
+    parser.add_argument('-i', metavar='tr_list', type=str, default=None, help='List of single isoform transcripts.')
     parser.add_argument('-q', metavar='min_qual', type=int, default=10, help='Minimum mapping quality.')
     parser.add_argument('-p', metavar='pickle_file', type=str, default="pb_plot.pk", help='Results pickle file.')
     args            = parser.parse_args()
@@ -278,12 +280,35 @@ class BaseCounter:
         fh.flush()
         fh.close()
 
+class SingleIsoList:
+    """ The list of single isoform genes. """
+    def __init__(self, infile, log):
+        self.log        = log
+        self.have_list  = False
+        if not infile is None:
+            self.infile = infile
+            fh          = open(infile, "r")
+            self.trs    = fh.readlines()
+            for i in xrange(len(self.trs)):
+                self.trs[i] = self.trs[i].rstrip()
+            self.have_list = True
+            self.log.log("Number of single isoform transcripts specified: %d" % self.size() )
+
+    def single_isoform(self, name):
+        if not self.have_list:
+            return True
+        else:
+            return (name in self.trs) 
+
+    def size(self):
+        return len(self.trs)
 
 class ParseFrags:
     """ Parse fragments """
-    def __init__(self, infile, num_ref, min_qual, log, report):
+    def __init__(self, infile, num_ref, min_qual, iso, log, report):
         self.infile     =   infile
         self.min_qual   =   min_qual
+        self.iso        =   iso
         self.log        =   log
         self.report     =   report
         self.num_ref    =   num_ref
@@ -321,6 +346,9 @@ class ParseFrags:
             # Mismatching reference:
             elif pair[0].iv.chrom != pair[1].iv.chrom:
                 continue
+            # Not in single isoform list:
+            if not self.iso.single_isoform(pair[0].iv.chrom):
+                continue
             # One of the reads has low mapping quality:
             elif pair[0].aQual < min_qual or pair[1].aQual < min_qual:
                 continue
@@ -351,10 +379,13 @@ args    = parse_arguments()
 L       = Log()
 R       = Report(args.r)
 
+# Slurp list of single isoform transcripts:
+iso     = SingleIsoList(args.i, L)
+
 # Slurp reference sequences:
 num_ref = NumRef( Fasta(args.f).slurp() )
 
-fp      = ParseFrags(args.input_file, num_ref.num_ref, args.q, L, R)
+fp      = ParseFrags(args.input_file, num_ref.num_ref, args.q, iso, L, R)
 
 bc      = BaseCounter(args.w)
 
