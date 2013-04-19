@@ -66,6 +66,12 @@ def parse_arguments():
     args            = parser.parse_args()
     return args
 
+def ptrim(s, n=4):
+    """ Return the last n portions of a file path """
+    tmp = s.split(os.sep)
+    m = min(n, len(tmp))
+    return "..." + os.sep + os.sep.join(tmp[-m:])
+
 class Report:
     """ Class for plotting reports """
     def __init__(self, pdf):
@@ -437,9 +443,9 @@ class CovComp:
         plt.plot(x, y1,'b.', markersize=0.1)
         plt.plot(x, -y2,'b.', markersize=0.1)
     
-        plt.title("%s - %s" % (tr, os.path.basename(self.f1.infile)) )
+        plt.title("%s - %s" % (tr, ptrim(self.f1.infile)) )
         plt.suptitle("p=%e, Rho=%e" % (self.pvals[tr], self.stats[tr]) )
-        plt.xlabel("%s - %s"% (tr, os.path.basename(self.f2.infile)) )
+        plt.xlabel("%s - %s"% (tr, ptrim(self.f2.infile)) )
         plt.ylabel("Relative coverage")
         self.report.pages.savefig(fig)
         plt.clf()
@@ -470,9 +476,9 @@ class CovComp:
         plt.vlines(blue_idx,0, -y2[blue_idx],color='b',linestyles='solid', linewidth=ms)
         plt.vlines(red_idx,0,  -y2[red_idx],color='r',linestyles='solid', linewidth=ms)
 
-        plt.title("%s - %s" % (tr, self.f1.infile) )
+        plt.title("%s - %s" % (tr, ptrim(self.f1.infile)) )
         plt.suptitle("p=%e, Rho=%e" % (self.pvals[tr], self.stats[tr]) )
-        plt.xlabel("%s - %s"% (tr, self.f2.infile) )
+        plt.xlabel("%s - %s"% (tr, ptrim(self.f2.infile)) )
         plt.ylabel("Relative coverage")
         self.report.pages.savefig(fig)
         plt.clf()
@@ -490,8 +496,8 @@ class CovComp:
 
         plt.title("Cumulative relative coverage")
         plt.suptitle("p=%e, Rho=%e" % (self.pvals[tr], self.stats[tr]) )
-        plt.xlabel(self.f1.infile)
-        plt.ylabel(self.f2.infile)
+        plt.xlabel(ptrim(self.f1.infile))
+        plt.ylabel(ptrim(self.f2.infile))
         self.report.pages.savefig(fig)
         plt.clf()
         plt.close(fig)
@@ -520,8 +526,8 @@ class CovComp:
 
         plt.title("Cumulative relative coverage")
         plt.suptitle("p=%e, Rho=%e" % (self.pvals[tr], self.stats[tr]) )
-        plt.xlabel(self.f1.infile)
-        plt.ylabel(self.f2.infile)
+        plt.xlabel(ptrim(self.f1.infile))
+        plt.ylabel(ptrim(self.f2.infile))
         self.report.pages.savefig(fig)
         plt.clf()
         plt.close(fig)
