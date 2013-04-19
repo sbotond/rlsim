@@ -51,13 +51,14 @@ import      warnings
 
 def parse_arguments():
     """ Parse arguments """
-    parser = argparse.ArgumentParser(description='Compare coverage trends between two datasets (version %s).' % VERSION)
+    parser = argparse.ArgumentParser(description='Compare coverage trends between the *expressed* transcripts of two datasets (version %s).' % VERSION)
     parser.add_argument('input_files', metavar='input file', type=str, nargs=2, default=None, help='Two sets of aligned *paired end* reads in SAM format.')
     parser.add_argument('-f', metavar='ref_fasta', type=str, default="", help='Reference sequences in fasta format.', required=True)
     parser.add_argument('-g', action='store_true' ,default=False, help='Do not color by AT/GC.')
     parser.add_argument('-t', metavar='nr_top', type=int, default=30, help='Plot at least this many top matches.', required=False)
     parser.add_argument('-i', metavar='iso_list', type=str, default=None, help='List of single isoform genes.', required=False)
     parser.add_argument('-l', metavar='min_length', type=int, default=0, help='Minimum transcript length.', required=False)
+    parser.add_argument('-x', action='store_true', default=False, help='Sort by correlation coefficients.', required=False)
     parser.add_argument('-r', metavar='report_file', type=str, default="cov_cmp.pdf", help='Name of PDF report file.')
     parser.add_argument('-q', metavar='min_qual', type=int, default=10, help='Minimum mapping quality.')
     parser.add_argument('-p', metavar='pickle_file', type=str, default=None, help='Results pickle file.')
@@ -327,7 +328,7 @@ class ExpLevelComp:
 
 class CovComp:
     """ Class for transcript-wise comparison of coverage trends """
-    def __init__(self, ref_seq, f1, f2, ref, ctrs, top_count, gc_col, log, report):
+    def __init__(self, ref_seq, f1, f2, ref, ctrs, top_count, gc_col, by_rho, log, report):
         self.ref_seq=ref_seq
         self.log    = log
         self.ref    = ref
@@ -337,10 +338,14 @@ class CovComp:
         self.ctrs   = ctrs # Set of common transcripts
         self.top_count = top_count
         self.gc_col = gc_col
+        self.by_rho = by_rho
 
         self.cmp()
         self.plot_cmp()
-        self.plot_top_matches()
+        if self.by_rho:
+            self.plot_top_matches_rho()
+        else:
+            self.plot_top_matches_p()
 
     def cmp(self):
         """ Run analysis on the set of common transcripts """
@@ -367,25 +372,58 @@ class CovComp:
         self.report.plot_hist(self.stats.values(), "Rho distribution", "Rho", "count",100)
         self.report.plot_hist(self.pvals.values(), "p-value distribution", "p-value", "count",100)
 
-    def plot_top_matches(self):
-        """ Select and plot the transcripts with the most similar coverage trends """
+    def plot_top_matches_p(self):
+        """ Select and plot the transcripts with the most similar coverage trends (by p value) """
         # Find the self.top_count^th p value:
-        tmp = self.pvals.values() 
+        target  = self.pvals
+        tmp = target.values() 
         tmp.sort()
         lim = tmp[min(self.top_count, len(tmp)-1)]
 
         print("Transcript\tLength\t\tp-value\t\trho")
 
+        h  = defaultdict(list)
+        for tr, v in target.iteritems():
+            if v < lim:
+                h[v].append(tr)
+
         # Plot top matches:
-        for tr, p in self.pvals.iteritems():
-            if p <= lim:
-                print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), p, self.stats[tr])
+        for s in sorted(h.keys()):
+            for tr in h[s]:
+                print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), self.pvals[tr], self.stats[tr])
                 if self.gc_col:
                     self.tr2bars(tr)
                     self.tr2cmp(tr)
                 else:
                     self.tr2bars_gc_col(tr)
                     self.tr2cmp_gc_col(tr)
+
+    def plot_top_matches_rho(self):
+        """ Select and plot the transcripts with the most similar coverage trends (by rho value) """
+        # Find the self.top_count^th p value:
+        target  = self.stats
+        tmp = target.values() 
+        tmp.sort(reverse=True)
+        lim = tmp[min(self.top_count, len(tmp)-1)]
+
+        print("Transcript\tLength\t\tp-value\t\trho")
+
+        h  = defaultdict(list)
+        for tr, v in target.iteritems():
+            if v > lim:
+                h[v].append(tr)
+
+        # Plot top matches:
+        for s in sorted(h.keys(), reverse=True):
+            for tr in h[s]:
+                print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), self.pvals[tr], self.stats[tr])
+                if self.gc_col:
+                    self.tr2bars(tr)
+                    self.tr2cmp(tr)
+                else:
+                    self.tr2bars_gc_col(tr)
+                    self.tr2cmp_gc_col(tr)
+
 
     def tr2bars(self, tr):
         """ Plot coverage coverage for a trancript """
@@ -522,7 +560,7 @@ f2          = ParseFrags(args.input_files[1], ref, args.q, L)
 f2.parse_frags()
 
 elcomp      = ExpLevelComp(f1, f2, R, L)
-cov_comp    = CovComp(ref, f1, f2, ref, elcomp.ctrs, args.t, args.g, L, R)
+cov_comp    = CovComp(ref, f1, f2, ref, elcomp.ctrs, args.t, args.g, args.x, L, R)
 
 pickle_results(args, elcomp, cov_comp)
 
