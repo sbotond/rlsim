@@ -281,14 +281,13 @@ class ParseFrags:
                 fm[start] = count
             # Normalise by total counts:
             total = np.sum(fm)
-            if total > self.min_cov:
+            if total >= self.min_cov:
                 frag_vecs[chrom] = fm/total
 
         # Discard expression levels lower than min_cov:
         for tr in expr_levels.keys():
             if expr_levels[tr] < self.min_cov:
                 del expr_levels[tr]
-                self.ctrs.remove(tr)    # Remove it from the transcript list.
 
         self.expr_levels = expr_levels
         self.frag_vecs = frag_vecs
