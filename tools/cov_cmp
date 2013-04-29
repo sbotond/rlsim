@@ -56,6 +56,7 @@ def parse_arguments():
     parser.add_argument('-f', metavar='ref_fasta', type=str, default="", help='Reference sequences in fasta format.', required=True)
     parser.add_argument('-g', action='store_true' ,default=False, help='Do not color by AT/GC.')
     parser.add_argument('-t', metavar='nr_top', type=int, default=30, help='Plot at least this many top matches.', required=False)
+    parser.add_argument('-c', metavar='min_cov', type=int, default=0, help='Minimum number of fragments per transcript.', required=False)
     parser.add_argument('-i', metavar='iso_list', type=str, default=None, help='List of single isoform genes.', required=False)
     parser.add_argument('-l', metavar='min_length', type=int, default=0, help='Minimum transcript length.', required=False)
     parser.add_argument('-x', action='store_true', default=False, help='Sort by correlation coefficients.', required=False)
@@ -179,12 +180,13 @@ class SingleIsoList:
 
 class ParseFrags:
     """ Parse fragments """
-    def __init__(self, infile, ref_seq, min_qual, log):
+    def __init__(self, infile, ref_seq, min_qual, min_cov, log):
         self.infile     =   infile
         self.min_qual   =   min_qual
         self.log        =   log
         self.ref_seq    =   ref_seq
         self.read_iter  =   self.open_iter()
+        self.min_cov    =   min_cov
 
     def open_iter(self):
         if self.infile == "-":
@@ -278,7 +280,14 @@ class ParseFrags:
             for start, count in st.iteritems():
                 fm[start] = count
             # Normalise by total counts:
-            frag_vecs[chrom] = fm/np.sum(fm)
+            total = np.sum(fm)
+            if total > self.min_cov:
+                frag_vecs[chrom] = fm/total
+
+        # Discard expression levels lower than min_cov:
+        for tr in expr_levels.keys():
+            if expr_levels[tr] < self.min_cov:
+                del expr_levels[tr]
 
         self.expr_levels = expr_levels
         self.frag_vecs = frag_vecs
@@ -429,10 +438,12 @@ class CovComp:
                 print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), self.pvals[tr], self.stats[tr])
                 if self.gc_col:
                     self.tr2bars(tr)
-                    self.tr2cmp(tr)
+                    if self.plot_line:
+                        self.tr2cmp(tr)
                 else:
                     self.tr2bars_gc_col(tr)
-                    self.tr2cmp_gc_col(tr)
+                    if self.plot_line:
+                        self.tr2cmp_gc_col(tr)
 
 
     def tr2bars(self, tr):
@@ -564,10 +575,10 @@ R           = Report(args.r)
 
 ref         = Fasta(args.f).slurp(SI, args.l)
 
-f1          = ParseFrags(args.input_files[0], ref, args.q, L)
+f1          = ParseFrags(args.input_files[0], ref, args.q, args.c, L)
 f1.parse_frags()
 
-f2          = ParseFrags(args.input_files[1], ref, args.q, L)
+f2          = ParseFrags(args.input_files[1], ref, args.q, args.c, L)
 f2.parse_frags()
 
 elcomp      = ExpLevelComp(f1, f2, R, L)
