@@ -432,7 +432,7 @@ class CovComp:
 
 
     def tr2bars(self, tr):
-        """ Plot coverage coverage for a trancript """
+        """ Plot coverage coverage for a transcript """
         seq = self.ref[tr]
         y1  = self.f1.frag_vecs[tr]
         y2  = self.f2.frag_vecs[tr]
@@ -458,12 +458,13 @@ class CovComp:
         y2  = self.f2.frag_vecs[tr]
         x       = np.arange(len(y1))
         col     = { 'A': 'b', 'T': 'b', 'G': 'r', 'C': 'r'}
+        nuc     = col.keys()
         fig = plt.figure()
 
         blue_idx, red_idx = [], []
 
         for i in xrange(len(y1)):
-            if col[seq[i]] == 'b':
+            if (seq[i] not in nuc) or (col[seq[i]] == 'b'):
                 blue_idx.append(i)
             else:
                 red_idx.append(i)
