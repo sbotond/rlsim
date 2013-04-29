@@ -288,6 +288,7 @@ class ParseFrags:
         for tr in expr_levels.keys():
             if expr_levels[tr] < self.min_cov:
                 del expr_levels[tr]
+                self.ctrs.remove(tr)    # Remove it from the transcript list.
 
         self.expr_levels = expr_levels
         self.frag_vecs = frag_vecs
