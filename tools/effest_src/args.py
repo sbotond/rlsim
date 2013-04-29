@@ -87,9 +87,9 @@ def parse_arguments():
     parser.add_argument('-o', metavar='in_prior_file', type=str, default=None,
                    help='Load fragment prior from the specified pickle file.')
 
-    q_default   = 10 
+    q_default   = 0 
     parser.add_argument('-q', metavar='min_qual', type=int, default=q_default,
-                   help='Minimum mapping quality (10).',required=False)
+                   help='Minimum mapping quality (0).',required=False)
 
     parser.add_argument('-r', metavar='report_file', type=str, default="effest_report.pdf",
                    help='Report PDF (effest_report.pdf).')

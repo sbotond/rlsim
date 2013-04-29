@@ -62,7 +62,7 @@ def parse_arguments():
     parser.add_argument('-x', action='store_true', default=False, help='Sort by correlation coefficients.', required=False)
     parser.add_argument('-y', action='store_true', default=False, help='Plot pairwise cumulative coverage.', required=False)
     parser.add_argument('-r', metavar='report_file', type=str, default="cov_cmp.pdf", help='Name of PDF report file.')
-    parser.add_argument('-q', metavar='min_qual', type=int, default=10, help='Minimum mapping quality (10).')
+    parser.add_argument('-q', metavar='min_qual', type=int, default=0, help='Minimum mapping quality (0).')
     parser.add_argument('-p', metavar='pickle_file', type=str, default=None, help='Results pickle file.')
     parser.add_argument('-v', action='store_true' ,default=False, help='Toggle verbose mode.')
     args            = parser.parse_args()
