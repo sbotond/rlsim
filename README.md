@@ -29,6 +29,8 @@ approaches for estimating the parameters which can be recovered from
 standard RNA-seq data (GC-dependent amplification efficiencies, fragment
 size distribution, relative expression levels).
 
+[![Catalogued on GSR](http://popmodels.cancercontrol.cancer.gov/static/img/gsr_tile.jpg)](http://popmodels.cancercontrol.cancer.gov/gsr/packages/rlsim)
+
 Citing the `rlsim` package
 --------------------------
 
