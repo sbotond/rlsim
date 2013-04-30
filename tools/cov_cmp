@@ -56,7 +56,7 @@ def parse_arguments():
     parser.add_argument('-f', metavar='ref_fasta', type=str, default="", help='Reference sequences in fasta format.', required=True)
     parser.add_argument('-g', action='store_true' ,default=False, help='Do not color by AT/GC.')
     parser.add_argument('-t', metavar='nr_top', type=int, default=30, help='Plot at least this many top matches (30).', required=False)
-    parser.add_argument('-c', metavar='min_cov', type=int, default=20, help='Minimum number of fragments per transcript (20).', required=False)
+    parser.add_argument('-c', metavar='min_cov', type=int, default=50, help='Minimum number of fragments per transcript (20).', required=False)
     parser.add_argument('-i', metavar='iso_list', type=str, default=None, help='List of single isoform genes.', required=False)
     parser.add_argument('-l', metavar='min_length', type=int, default=0, help='Minimum transcript length.', required=False)
     parser.add_argument('-x', action='store_true', default=False, help='Sort by correlation coefficients.', required=False)
@@ -281,14 +281,13 @@ class ParseFrags:
                 fm[start] = count
             # Normalise by total counts:
             total = np.sum(fm)
-            if total > self.min_cov:
+            if total >= self.min_cov:
                 frag_vecs[chrom] = fm/total
 
         # Discard expression levels lower than min_cov:
         for tr in expr_levels.keys():
             if expr_levels[tr] < self.min_cov:
                 del expr_levels[tr]
-                self.ctrs.remove(tr)    # Remove it from the transcript list.
 
         self.expr_levels = expr_levels
         self.frag_vecs = frag_vecs
