@@ -59,7 +59,7 @@ def parse_arguments():
     parser.add_argument('-j', metavar='out_json', type=str, default="raw_params.json",
                    help='File to store estimated raw parameters (raw_params.json).', required=False)
 
-    e_default   = 100000.0
+    e_default   = 100.0
     parser.add_argument('-e', metavar='expr_mul', type=float, default=e_default,
                    help='Expression level multiplier (%s).' % e_default,required=False)
 

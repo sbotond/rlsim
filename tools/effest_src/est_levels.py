@@ -54,6 +54,8 @@ class EstLevels:
         """ Estimate expression levels. """
         # Precalculate efficiency weights:
         w       = np.power( ( 1/(self.model.ppr + 1.0) ), self.nr_cycles ) 
+        w       = w/np.min(w) # Normalise by dividing with the minimum.
+
         c       = self.counts
         levels  = { }
         lengths = [ ]
