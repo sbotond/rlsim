@@ -64,8 +64,8 @@ def parse_arguments():
                    help='Expression level multiplier (%s).' % e_default,required=False)
 
     a_default   = True
-    parser.add_argument('-a', default=a_default, action="store_true", 
-                   help='Use GC efficiency correction on expression levels (%s).' % a_default, required=False)
+    parser.add_argument('-a', default=a_default, action="store_false", 
+                   help='Do not use GC efficiency correction on expression levels (False).', required=False)
 
     t_default   = True
     parser.add_argument('-t', default=t_default, action="store_true", 
