@@ -4,16 +4,17 @@
 \label{ss:qeffest}
 
 \begin{verbatim}
+
 usage: effest [-h] [-f ref_fasta] [-i iso_list] [-c nr_cycles] [-m mean_eff]
               [-M max_eff] [-d dist_fam] [-g out_fasta] [-j out_json]
               [-e expr_mul] [-a] [-t] [-w step_size] [-s out_count_file]
-              [-o in_prior_file] [-p out_prior_file] [-k in_count_file]
+              [-k in_count_file] [-p out_prior_file] [-o in_prior_file]
               [-q min_qual] [-r report_file] [-l log_file] [-v]
               [input file]
 
 Estimate GC-dependent fragment amplification efficiencies and fragment size
 distribution from paired-end RNA-seq data mapped to transcriptome (version
-1.0).
+1.1).
 
 positional arguments:
   input file         Aligned *paired end* reads in SAM format sorted by
@@ -30,19 +31,21 @@ optional arguments:
                      (n|sn|*auto*).
   -g out_fasta       Output fasta.
   -j out_json        File to store estimated raw parameters (raw_params.json).
-  -e expr_mul        Expression level multiplier (5.0).
-  -a                 Use GC efficiency correction on expression levels (True).
+  -e expr_mul        Expression level multiplier (10000.0).
+  -a                 Do not use GC efficiency correction on expression levels
+                     (False).
   -t                 Trim off old expression values (True).
-  -w step_size       Sliding window size / step size ratio (10).
+  -w step_size       Sliding window size / step size ratio (5).
   -s out_count_file  Pickle counts to the specified file (effest_counts.pk).
-  -o in_prior_file   Load fragment prior from the specified pickle file.
-  -p out_prior_file  Pickle fragment prior to the specifies file
-                     (effest_pr.pk).
   -k in_count_file   Load counts from specifies file.
-  -q min_qual        Minimum mapping quality (10).
+  -p out_prior_file  Pickle fragment prior to the specified file
+                     (effest_pr.pk).
+  -o in_prior_file   Load fragment prior from the specified pickle file.
+  -q min_qual        Minimum mapping quality (0).
   -r report_file     Report PDF (effest_report.pdf).
-  -l log_file        Log file (stderr).
+  -l log_file        Log file.
   -v                 Toggle verbose mode (False).
+
 \end{verbatim}
 
 \subsection{Background}
@@ -167,14 +170,16 @@ The counts of the fragments mapped to a given transcript $t$ are binned by GC co
 Then, based on the estimated GC-dependent efficiencies, an ``efficiency weight'' vector ($w$) is calculated for each GC content bin, based on the expected number of descendants of a single molecule from the bin after $n$ PCR cycles:
 
 \begin{equation}
-    w_i = \left(1+\epsilon_i\right)^n
+    w_i = \frac{1}{\left(1+\epsilon_i\right)^n}
 \end{equation}
 
 The relative expression level of the transcript ($E_t$) is calculated by summing the count vector normalised by the length of the transcript ($l_t$) and the efficiency weight vector and also multiplied by a value supplied by the user through the \texttt{-e} flag ($E_u$):
 
 \begin{equation}
-    E_t = \left( \sum_{i=0}^{100} \frac{C_{t,i}}{w_i} \right) \frac{1}{l_t} E_u
+    E_t = \left( \sum_{i=0}^{100} C_{t,i} \frac{w_i}{\mathrm{min}(w)} \right) \frac{1}{l_t} E_u
 \end{equation}
+
+Note that the GC-dependent efficiency correction through $w_i$ gives more weight to fragments with lower efficiencies.
 
 The calculated relative expression level is analogous to the widely used FPKM metric, but corrected for the effects of GC-dependent efficiencies.
 The GC correction can be disabled by the \texttt{-a} flag.
@@ -189,13 +194,13 @@ As it is impossible to estimate absolute expression levels from standard RNA-seq
 usage: effest [-h] [-f ref_fasta] [-i iso_list] [-c nr_cycles] [-m mean_eff]
               [-M max_eff] [-d dist_fam] [-g out_fasta] [-j out_json]
               [-e expr_mul] [-a] [-t] [-w step_size] [-s out_count_file]
-              [-o in_prior_file] [-p out_prior_file] [-k in_count_file]
+              [-k in_count_file] [-p out_prior_file] [-o in_prior_file]
               [-q min_qual] [-r report_file] [-l log_file] [-v]
               [input file]
 
 Estimate GC-dependent fragment amplification efficiencies and fragment size
 distribution from paired-end RNA-seq data mapped to transcriptome (version
-1.0).
+1.1).
 
 positional arguments:
   input file         Aligned *paired end* reads in SAM format sorted by
@@ -222,15 +227,15 @@ The file containing the list of single-isoform transcripts (one name per file) i
     \item[\texttt{-d}]{Distribution family to be fitted on the empirical distribution of fragment sizes. The possible values are \texttt{n} for truncated normal, \texttt{sn} for skew normal and \texttt{auto} for selecting the best fitting family using AIC (default).}
     \item[\texttt{-g}]{The name of the output fasta file, augmented with relative expression levels (default: <input\_name>\_expr.fas).}
     \item[\texttt{-j}]{JSON file to store estimated raw parameters (default: \texttt{raw\_params.json}).}
-    \item[\texttt{-e}]{The value of the expression level multiplier ($E_u$, default: $10^5$)}
-    \item[\texttt{-a}]{Disable GC-dependent efficiency correction.}
+    \item[\texttt{-e}]{The value of the expression level multiplier ($E_u$, default: $10^4$)}
+    \item[\texttt{-a}]{Disable GC-dependent efficiency correction (False).}
     \item[\texttt{-t}]{Do not trim off old expression values from input transcriptome.}
     \item[\texttt{-w}]{Sliding window step size parameter. Step size used for the sliding window analysis is equal to the fragment size divided by the value of this flag (10 by default). Set it to smaller value in order to speed up the calculating of the fragment prior.}
     \item[\texttt{-s}]{The name of the fragment count pickle file (default: \texttt{effest\_counts.pk}).}
     \item[\texttt{-k}]{Use the fragment counts pickled in the specified file as input (no default).}
     \item[\texttt{-p}]{Pickle fragment prior to the specifies file (default: \texttt{effest\_pr.pk}).}
     \item[\texttt{-o}]{Load fragment prior from the specified pickle file (no default).}
-    \item[\texttt{-q}]{Minimum mapping quality. Fragment having either reads a mapping quality lower than this value are discarded (default: 10)}
+    \item[\texttt{-q}]{Minimum mapping quality. Fragment having either reads a mapping quality lower than this value are discarded (default: 0)}
     \item[\texttt{-r}]{Name of the report PDF file (default: \texttt{effest\_report.pdf}).}
     \item[\texttt{-l}]{Name of the log file (default: stderr).}
     \item[\texttt{-v}]{Toggle verbose mode.}

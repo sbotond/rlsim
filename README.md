@@ -337,13 +337,13 @@ Quick reference
     usage: effest [-h] [-f ref_fasta] [-i iso_list] [-c nr_cycles] [-m mean_eff]
                   [-M max_eff] [-d dist_fam] [-g out_fasta] [-j out_json]
                   [-e expr_mul] [-a] [-t] [-w step_size] [-s out_count_file]
-                  [-o in_prior_file] [-p out_prior_file] [-k in_count_file]
+                  [-k in_count_file] [-p out_prior_file] [-o in_prior_file]
                   [-q min_qual] [-r report_file] [-l log_file] [-v]
                   [input file]
 
     Estimate GC-dependent fragment amplification efficiencies and fragment size
     distribution from paired-end RNA-seq data mapped to transcriptome (version
-    1.0).
+    1.1).
 
     positional arguments:
       input file         Aligned *paired end* reads in SAM format sorted by
@@ -360,18 +360,19 @@ Quick reference
                          (n|sn|*auto*).
       -g out_fasta       Output fasta.
       -j out_json        File to store estimated raw parameters (raw_params.json).
-      -e expr_mul        Expression level multiplier (5.0).
-      -a                 Use GC efficiency correction on expression levels (True).
+      -e expr_mul        Expression level multiplier (10000.0).
+      -a                 Do not use GC efficiency correction on expression levels
+                         (False).
       -t                 Trim off old expression values (True).
-      -w step_size       Sliding window size / step size ratio (10).
+      -w step_size       Sliding window size / step size ratio (5).
       -s out_count_file  Pickle counts to the specified file (effest_counts.pk).
-      -o in_prior_file   Load fragment prior from the specified pickle file.
-      -p out_prior_file  Pickle fragment prior to the specifies file
-                         (effest_pr.pk).
       -k in_count_file   Load counts from specifies file.
-      -q min_qual        Minimum mapping quality (10).
+      -p out_prior_file  Pickle fragment prior to the specified file
+                         (effest_pr.pk).
+      -o in_prior_file   Load fragment prior from the specified pickle file.
+      -q min_qual        Minimum mapping quality (0).
       -r report_file     Report PDF (effest_report.pdf).
-      -l log_file        Log file (stderr).
+      -l log_file        Log file.
       -v                 Toggle verbose mode (False).
 ```
 
@@ -411,11 +412,11 @@ Quick reference
 ### `pb_plot`
 
 ```
-    usage: pb_plot [-h] [-f ref_fasta] [-r report_file] [-w winsize] [-q min_qual]
-                   [-p pickle_file]
+    usage: pb_plot [-h] [-f ref_fasta] [-r report_file] [-w winsize] [-i tr_list]
+                   [-q min_qual] [-p pickle_file]
                    [input file]
 
-    Visualise sequence biases around fragment start/end (version 1.0).
+    Visualise sequence biases around fragment start/end (version 1.1).
 
     positional arguments:
       input file      Aligned *paired end* reads in SAM format.
@@ -425,6 +426,7 @@ Quick reference
       -f ref_fasta    Reference sequences in fasta format.
       -r report_file  Name of PDF report file.
       -w winsize      Window size.
+      -i tr_list      List of single isoform transcripts.
       -q min_qual     Minimum mapping quality.
       -p pickle_file  Results pickle file.
 ```
@@ -432,12 +434,13 @@ Quick reference
 ### `cov_cmp`
 
 ```
-    usage: cov_cmp [-h] -f ref_fasta [-g] [-t nr_top] [-i iso_list]
-                   [-l min_length] [-r report_file] [-q min_qual] [-p pickle_file]
-                   [-v]
+    usage: cov_cmp [-h] -f ref_fasta [-g] [-t nr_top] [-c min_cov] [-i iso_list]
+                   [-l min_length] [-x] [-y] [-r report_file] [-q min_qual]
+                   [-p pickle_file] [-v]
                    input file input file
 
-    Compare coverage trends between two datasets (version 1.0).
+    Compare relative coverage trends between the *expressed* transcripts of two
+    datasets (version 1.1).
 
     positional arguments:
       input file      Two sets of aligned *paired end* reads in SAM format.
@@ -446,11 +449,14 @@ Quick reference
       -h, --help      show this help message and exit
       -f ref_fasta    Reference sequences in fasta format.
       -g              Do not color by AT/GC.
-      -t nr_top       Plot at least this many top matches.
+      -t nr_top       Plot at least this many top matches (30).
+      -c min_cov      Minimum number of fragments per transcript (20).
       -i iso_list     List of single isoform genes.
       -l min_length   Minimum transcript length.
+      -x              Sort by correlation coefficients.
+      -y              Plot pairwise cumulative coverage.
       -r report_file  Name of PDF report file.
-      -q min_qual     Minimum mapping quality.
+      -q min_qual     Minimum mapping quality (0).
       -p pickle_file  Results pickle file.
       -v              Toggle verbose mode.
 ```

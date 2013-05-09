@@ -42,11 +42,11 @@ specified by the -d flag (default: \texttt{"0.5:g:(5e3,0.5) + 0.5:g:(5e4,1000)"}
 \subsection{{\tt pb\_plot}: plotting sequence biases}
 
 \begin{verbatim}
-usage: pb_plot [-h] [-f ref_fasta] [-r report_file] [-w winsize] [-q min_qual]
-               [-p pickle_file]
+usage: pb_plot [-h] [-f ref_fasta] [-r report_file] [-w winsize] [-i tr_list]
+               [-q min_qual] [-p pickle_file]
                [input file]
 
-Visualise sequence biases around fragment start/end (version 1.0).
+Visualise sequence biases around fragment start/end (version 1.1).
 
 positional arguments:
   input file      Aligned *paired end* reads in SAM format.
@@ -56,6 +56,7 @@ optional arguments:
   -f ref_fasta    Reference sequences in fasta format.
   -r report_file  Name of PDF report file.
   -w winsize      Window size.
+  -i tr_list      List of single isoform transcripts.
   -q min_qual     Minimum mapping quality.
   -p pickle_file  Results pickle file.
 \end{verbatim}
@@ -66,12 +67,13 @@ See section \ref{sss:frag_methods} for example plots.
 \subsection{{\tt cov\_cmp}: comparing coverage trends}
 
 \begin{verbatim}
-usage: cov_cmp [-h] -f ref_fasta [-g] [-t nr_top] [-i iso_list]
-               [-l min_length] [-r report_file] [-q min_qual] [-p pickle_file]
-               [-v]
+usage: cov_cmp [-h] -f ref_fasta [-g] [-t nr_top] [-c min_cov] [-i iso_list]
+               [-l min_length] [-x] [-y] [-r report_file] [-q min_qual]
+               [-p pickle_file] [-v]
                input file input file
 
-Compare coverage trends between two datasets (version 1.0).
+Compare relative coverage trends between the *expressed* transcripts of two
+datasets (version 1.0).
 
 positional arguments:
   input file      Two sets of aligned *paired end* reads in SAM format.
@@ -80,11 +82,14 @@ optional arguments:
   -h, --help      show this help message and exit
   -f ref_fasta    Reference sequences in fasta format.
   -g              Do not color by AT/GC.
-  -t nr_top       Plot at least this many top matches.
+  -t nr_top       Plot at least this many top matches (30).
+  -c min_cov      Minimum number of fragments per transcript (20).
   -i iso_list     List of single isoform genes.
   -l min_length   Minimum transcript length.
+  -x              Sort by correlation coefficients.
+  -y              Plot pairwise cumulative coverage.
   -r report_file  Name of PDF report file.
-  -q min_qual     Minimum mapping quality.
+  -q min_qual     Minimum mapping quality (0).
   -p pickle_file  Results pickle file.
   -v              Toggle verbose mode.
 \end{verbatim}
