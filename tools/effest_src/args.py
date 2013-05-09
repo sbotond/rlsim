@@ -25,7 +25,7 @@
 # License along with this program. If not, see
 # <http://www.gnu.org/licenses/>.
 
-VERSION = "1.0"
+VERSION = "1.1"
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Estimate GC-dependent fragment amplification efficiencies and fragment size distribution from paired-end RNA-seq data mapped to transcriptome (version %s).' % VERSION)
