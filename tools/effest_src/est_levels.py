@@ -43,9 +43,8 @@ class EstLevels:
                 self.log.fatal("Cannot estimate expression levels as output fasta file name is not specified in any way!")
             else:
                 out_file = os.path.basename(ref_file).split(".fas")[0] + "_expr.fas"
-        if os.path.exists(out_file):
-            self.log.fatal("Output fasta file %s already exists! Aborting!" % out_file) 
-        self.out_file   = out_file
+        self.out_file        = out_file
+        self.out_file_flat   = "flat_" + out_file
 
         self.estimate()
         self.plot_levels()
@@ -53,27 +52,29 @@ class EstLevels:
     def estimate(self):
         """ Estimate expression levels. """
         # Precalculate efficiency weights:
-        w       = np.power( ( 1/(self.model.ppr + 1.0) ), self.nr_cycles ) 
-        w       = w/np.min(w) # Normalise by dividing with the minimum.
+        t           = np.power( ( 1/(self.model.ppr + 1.0) ), self.nr_cycles ) 
+        w           = t/np.min(t)                 # Normalise by dividing with the minimum.
+        flat_mul    = np.median(t)/np.min(t)      # Multiplier for the flat model.
 
-        c       = self.counts
-        levels  = { }
-        lengths = [ ]
-        mul     = self.expr_mul
+        c               = self.counts
+        levels          = { }
+        levels_flat     = { }
+        mul             = self.expr_mul
 
         for name, seq in self.ref.iteritems():
-            level = 0 
+            level       = 0 
+            level_flat  = 0
             length= float(len(seq))
 
             if c.has_key(name):
-                if self.gc_correct:
-                    level = np.sum((c[name]/length) * w) * mul
-                else:
-                    level = np.sum(c[name]/length) * mul
+                level       = np.sum((c[name]/length) * w) * mul
+                level_flat  = np.sum(c[name]/length) * flat_mul * mul
 
-            levels[name] = np.ceil(level)
+            levels[name]        = np.ceil(level)
+            levels_flat[name]   = np.ceil(level_flat)
 
-        self.levels = levels
+        self.levels         = levels
+        self.levels_flat    = levels_flat
 
     def save_seq(self):
         """ Save estimated expression levels as augmented Fasta file. """
@@ -82,6 +83,12 @@ class EstLevels:
         for name, seq in self.ref.iteritems():
             print >>fh, ">%s$%d\n%s\n" % (self.trim_name(name), self.levels[name], seq)
         fh.close()
+        if self.gc_correct:
+            self.log.vlog("Saving uncorrected expression levels to file: %s" % self.out_file_flat)
+            fh = open(self.out_file_flat,'w')
+            for name, seq in self.ref.iteritems():
+                print >>fh, ">%s$%d\n%s\n" % (self.trim_name(name), self.levels_flat[name], seq)
+            fh.close()
 
     def trim_name(self, name):
         """ Trim off old expression levels. """
@@ -92,14 +99,6 @@ class EstLevels:
     def plot_levels(self):
         """ Plot the distribution of estimated expression levels. """
         d = np.array(self.levels.values())
-        self.report.plot_hist(data=d, 
-            title="Distribution of estimated expression levels",
-            xlab="Expression levels",
-            ylab="Counts",
-            bins=400
-        )
-
-        d = np.array(self.levels.values())
         d = d[d>0]
         self.report.plot_hist(data=d, 
             title="Distribution of estimated expression levels (zero excluded)",
@@ -107,3 +106,13 @@ class EstLevels:
             ylab="Counts",
             bins=400
         )
+
+        if self.gc_correct:
+            d = np.array(self.levels_flat.values())
+            d = d[d>0]
+            self.report.plot_hist(data=d, 
+                title="Distribution of uncorrected expression levels (zero excluded)",
+                xlab="Expression levels",
+                ylab="Counts",
+                bins=400
+            )

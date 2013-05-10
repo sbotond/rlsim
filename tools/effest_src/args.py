@@ -63,9 +63,9 @@ def parse_arguments():
     parser.add_argument('-e', metavar='expr_mul', type=float, default=e_default,
                    help='Expression level multiplier (%s).' % e_default,required=False)
 
-    a_default   = True
-    parser.add_argument('-a', default=a_default, action="store_false", 
-                   help='Do not use GC efficiency correction on expression levels (False).', required=False)
+    u_default   = False
+    parser.add_argument('-u', default=u_default, action="store_true", 
+                   help='Save the uncorrected expression levels as well (False).', required=False)
 
     t_default   = True
     parser.add_argument('-t', default=t_default, action="store_true", 

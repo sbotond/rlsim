@@ -83,7 +83,7 @@ L.vlog("Estimated minimum efficiency: %g" % eff_model_gc.fitted_params[1])
 L.vlog("Estimated shape parameter: %g" % eff_model_gc.fitted_params[0])
 
 # Estimate expression levels:
-el = EstLevels(ref_seq, frags, arg.c, eff_model_gc, arg.g, arg.e, arg.f, arg.t, arg.a, L, R)
+el = EstLevels(ref_seq, frags, arg.c, eff_model_gc, arg.g, arg.e, arg.f, arg.t, arg.u, L, R)
 el.save_seq()
 
 # Fit fragment size distribution:
