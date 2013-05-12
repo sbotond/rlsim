@@ -121,6 +121,6 @@ func (f Frag) GetName() string {
 }
 
 func (f Frag) String() string {
-	s := fmt.Sprintf(">Frag_%d %s (Strand %s Offset %d -- %d)\n%s", f.GetId(), f.GetName(), f.GetStrand(), f.GetStart(), f.GetEnd(), f.GetSeq())
+	s := fmt.Sprintf(">Fg_%d_%s (Strand %s Offset %d -- %d)\n%s", f.GetId(), f.GetName(), f.GetStrand(), f.GetStart(), f.GetEnd(), f.GetSeq())
 	return s
 }
