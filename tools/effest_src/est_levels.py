@@ -44,7 +44,8 @@ class EstLevels:
             else:
                 out_file = os.path.basename(ref_file).split(".fas")[0] + "_expr.fas"
         self.out_file        = out_file
-        self.out_file_flat   = "flat_" + out_file
+        t                    = os.path.split(out_file)
+        self.out_file_flat   = os.path.join(t[0], "flat_" + t[1])
 
         self.estimate()
         self.plot_levels()
