@@ -55,24 +55,35 @@ class EstLevels:
         # Precalculate efficiency weights:
         t           = np.power( ( 1/(self.model.ppr + 1.0) ), self.nr_cycles ) 
         w           = t/np.min(t)                 # Normalise by dividing with the minimum.
-        flat_mul    = np.median(t)/np.min(t)      # Multiplier for the flat model.
 
         c               = self.counts
         levels          = { }
         levels_flat     = { }
         mul             = self.expr_mul
+        te, tef         = 0.0, 0.0
 
+        # Calculate GC cocrrected and flat expression levels:
         for name, seq in self.ref.iteritems():
-            level       = 0 
-            level_flat  = 0
+            level       = 0.0
+            level_flat  = 0.0
             length= float(len(seq))
 
             if c.has_key(name):
-                level       = np.sum((c[name]/length) * w) * mul
-                level_flat  = np.sum(c[name]/length) * flat_mul * mul
+                level       = np.sum((c[name]/length) * w)  * mul
+                level_flat  = np.sum(c[name]/length)        * mul
 
             levels[name]        = np.ceil(level)
-            levels_flat[name]   = np.ceil(level_flat)
+            te                 += level
+            levels_flat[name]   = level_flat
+            tef                += level_flat
+
+        # Calculate total expression count ratio:
+        fc  = te/tef
+
+        # Multiply flat expression levels in order to
+        # make sampling ratios more similar:
+        for tr in levels.iterkeys():
+            levels_flat[tr] = np.ceil(levels_flat[tr] * fc)
 
         self.levels         = levels
         self.levels_flat    = levels_flat
