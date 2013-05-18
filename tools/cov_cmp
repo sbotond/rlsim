@@ -64,8 +64,9 @@ def parse_arguments():
     parser.add_argument('-r', metavar='report_file', type=str, default="cov_cmp.pdf", help='Name of PDF report file.')
     parser.add_argument('-q', metavar='min_qual', type=int, default=0, help='Minimum mapping quality (0).')
     parser.add_argument('-p', metavar='pickle_file', type=str, default=None, help='Results pickle file.')
-    parser.add_argument('-v', action='store_true' ,default=False, help='Toggle verbose mode.')
-    args            = parser.parse_args()
+    parser.add_argument('-v', action='store_true', default=False, help='Toggle verbose mode.')
+    parser.add_argument('-s', action='store_true', default=False, help='Assume reads are single end.')
+    args = parser.parse_args()
     return args
 
 def ptrim(s, n=4):
@@ -180,13 +181,19 @@ class SingleIsoList:
 
 class ParseFrags:
     """ Parse fragments """
-    def __init__(self, infile, ref_seq, min_qual, min_cov, log):
+    def __init__(self, infile, ref_seq, min_qual, min_cov, log, single_end=False):
         self.infile     =   infile
         self.min_qual   =   min_qual
         self.log        =   log
         self.ref_seq    =   ref_seq
         self.read_iter  =   self.open_iter()
         self.min_cov    =   min_cov
+        self.single_end = single_end
+
+        if single_end:
+            self.iter_frags = self.iter_single
+        else:
+            self.iter_frags = self.iter_paired
 
     def open_iter(self):
         if self.infile == "-":
@@ -198,10 +205,31 @@ class ParseFrags:
         for (first, second) in ht.pair_SAM_alignments(self.read_iter):
             yield (first, second)
 
-    def iter_frags(self):
+    def iter_single(self):
+        """Get next fragment"""
+        min_qual = self.min_qual
+
+        for read in self.read_iter:
+            if not read.aligned:
+                continue
+
+            if read.aQual < min_qual:
+                continue
+
+            if read.iv.chrom not in self.ref_seq:
+                continue
+
+            if read.iv.start < read.iv.end:
+                yield (read.iv.chrom, read.iv.start, read.iv.end)
+            else:
+                yield (read.iv.chrom, read.iv.end, read.iv.start)
+
+    def iter_paired(self):
         """ Get next fragment """
+        # FIXME: Is this really necessary? (open_iter() is called in the constructor as well)
         self.open_iter()
-        min_qual    = self.min_qual
+        min_qual = self.min_qual
+
         for pair in self.next_pair():
             # Missing mate:
             if (pair[0] == None) or (pair[1] == None):
@@ -217,7 +245,7 @@ class ParseFrags:
                 continue
             elif (not pair[0].proper_pair ) or (not pair[1].proper_pair):
                 continue
-            # Mismatching reference:
+             # Mismatching reference:
             elif pair[0].iv.chrom != pair[1].iv.chrom:
                 continue
             # One of the reads has low mapping quality:
@@ -575,10 +603,10 @@ R           = Report(args.r)
 
 ref         = Fasta(args.f).slurp(SI, args.l)
 
-f1          = ParseFrags(args.input_files[0], ref, args.q, args.c, L)
+f1          = ParseFrags(args.input_files[0], ref, args.q, args.c, L, args.s)
 f1.parse_frags()
 
-f2          = ParseFrags(args.input_files[1], ref, args.q, args.c, L)
+f2          = ParseFrags(args.input_files[1], ref, args.q, args.c, L, args.s)
 f2.parse_frags()
 
 elcomp      = ExpLevelComp(f1, f2, R, L)

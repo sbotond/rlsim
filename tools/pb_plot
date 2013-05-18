@@ -58,6 +58,7 @@ def parse_arguments():
     parser.add_argument('-i', metavar='tr_list', type=str, default=None, help='List of single isoform transcripts.')
     parser.add_argument('-q', metavar='min_qual', type=int, default=10, help='Minimum mapping quality.')
     parser.add_argument('-p', metavar='pickle_file', type=str, default="pb_plot.pk", help='Results pickle file.')
+    parser.add_argument('-s', action='store_true', default=False, help='Assume reads are single ended.')
     args            = parser.parse_args()
 
     if args.f == "":
@@ -305,7 +306,7 @@ class SingleIsoList:
 
 class ParseFrags:
     """ Parse fragments """
-    def __init__(self, infile, num_ref, min_qual, iso, log, report):
+    def __init__(self, infile, num_ref, min_qual, iso, log, report, single_end=False):
         self.infile     =   infile
         self.min_qual   =   min_qual
         self.iso        =   iso
@@ -313,6 +314,11 @@ class ParseFrags:
         self.report     =   report
         self.num_ref    =   num_ref
         self.read_iter  =   self.open_iter()
+
+        if single_end:
+            self.iter_frag_contexts = self.iter_frag_single_contexts
+        else:
+            self.iter_frag_contexts = self.iter_frag_pair_contexts
 
     def open_iter(self):
         if self.infile == "-":
@@ -324,7 +330,22 @@ class ParseFrags:
         for (first, second) in ht.pair_SAM_alignments(self.read_iter):
             yield (first, second)
 
-    def iter_frag_contexts(self):
+    def iter_frag_single_contexts(self):
+        min_qual = self.min_qual
+
+        for frag in self.read_iter:
+            if not frag.aligned:
+                continue
+
+            if frag.aQual < min_qual:
+                continue
+
+            if frag.iv.start < frag.iv.end:
+                yield FragContext(self.num_ref, frag.iv.chrom, frag.iv.start, frag.iv.end, "+")
+            else:
+                yield FragContext(self.num_ref, frag.iv.chrom, frag.iv.end, read.iv.start, "-")
+        
+    def iter_frag_pair_contexts(self):
         """ Get next fragment """
         self.open_iter()
         min_qual    = self.min_qual
@@ -347,8 +368,8 @@ class ParseFrags:
             elif pair[0].iv.chrom != pair[1].iv.chrom:
                 continue
             # Not in single isoform list:
-            if not self.iso.single_isoform(pair[0].iv.chrom):
-                continue
+            # if not self.iso.single_isoform(pair[0].iv.chrom):
+            #     continue
             # One of the reads has low mapping quality:
             elif pair[0].aQual < min_qual or pair[1].aQual < min_qual:
                 continue
@@ -385,7 +406,7 @@ iso     = SingleIsoList(args.i, L)
 # Slurp reference sequences:
 num_ref = NumRef( Fasta(args.f).slurp() )
 
-fp      = ParseFrags(args.input_file, num_ref.num_ref, args.q, iso, L, R)
+fp      = ParseFrags(args.input_file, num_ref.num_ref, args.q, iso, L, R, args.s)
 
 bc      = BaseCounter(args.w)
 
