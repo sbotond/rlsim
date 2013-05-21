@@ -429,7 +429,7 @@ class CovComp:
 
         h  = defaultdict(list)
         for tr, v in target.iteritems():
-            if v < lim:
+            if v <= lim:
                 h[v].append(tr)
 
         # Plot top matches:
@@ -457,7 +457,7 @@ class CovComp:
 
         h  = defaultdict(list)
         for tr, v in target.iteritems():
-            if v > lim:
+            if v >= lim:
                 h[v].append(tr)
 
         # Plot top matches:
