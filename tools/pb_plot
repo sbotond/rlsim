@@ -340,6 +340,9 @@ class ParseFrags:
             if frag.aQual < min_qual:
                 continue
 
+            if not self.iso.single_isoform(frag.iv.chrom):
+                continue
+
             if frag.iv.start < frag.iv.end:
                 yield FragContext(self.num_ref, frag.iv.chrom, frag.iv.start, frag.iv.end, "+")
             else:
@@ -368,8 +371,8 @@ class ParseFrags:
             elif pair[0].iv.chrom != pair[1].iv.chrom:
                 continue
             # Not in single isoform list:
-            # if not self.iso.single_isoform(pair[0].iv.chrom):
-            #     continue
+            if not self.iso.single_isoform(pair[0].iv.chrom):
+                continue
             # One of the reads has low mapping quality:
             elif pair[0].aQual < min_qual or pair[1].aQual < min_qual:
                 continue
