@@ -44,6 +44,7 @@ import      os
 from        scipy       import  stats
 import      cPickle
 import      warnings
+import      operator
 
 ##
 ## Functions and classes:
@@ -420,59 +421,40 @@ class CovComp:
     def plot_top_matches_p(self):
         """ Select and plot the transcripts with the most similar coverage trends (by p value) """
         # Find the self.top_count^th p value:
-        target  = self.pvals
-        tmp = target.values() 
-        tmp.sort()
-        lim = tmp[min(self.top_count, len(tmp)-1)]
+        top_matches = sorted(self.pvals.items(), key=operator.itemgetter(1))[:self.top_count]
 
-        print("Transcript\tLength\t\tp-value\t\trho")
+        print("Transcript\tLength\t\tp-value\t\tp")
 
-        h  = defaultdict(list)
-        for tr, v in target.iteritems():
-            if v <= lim:
-                h[v].append(tr)
-
-        # Plot top matches:
-        for s in sorted(h.keys()):
-            for tr in h[s]:
-                print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), self.pvals[tr], self.stats[tr])
-                if self.gc_col:
-                    self.tr2bars(tr)
-                    if self.plot_line:
-                        self.tr2cmp(tr)
-                else:
-                    self.tr2bars_gc_col(tr)
-                    if self.plot_line:
-                        self.tr2cmp_gc_col(tr)
+        # Print and plot the top matches
+        for tr, v in top_matches:
+            print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), self.pvals[tr], self.stats[tr])
+            if self.gc_col:
+                self.tr2bars(tr)
+                if self.plot_line:
+                    self.tr2cmp(tr)
+            else:
+                self.tr2bars_gc_col(tr)
+                if self.plot_line:
+                    self.tr2cmp_gc_col(tr)
 
     def plot_top_matches_rho(self):
         """ Select and plot the transcripts with the most similar coverage trends (by rho value) """
         # Find the self.top_count^th p value:
-        target  = self.stats
-        tmp = target.values() 
-        tmp.sort(reverse=True)
-        lim = tmp[min(self.top_count, len(tmp)-1)]
+        top_matches = sorted(self.stats.items(), reverse=True, key=operator.itemgetter(1))[:self.top_count]
 
         print("Transcript\tLength\t\tp-value\t\trho")
 
-        h  = defaultdict(list)
-        for tr, v in target.iteritems():
-            if v >= lim:
-                h[v].append(tr)
-
-        # Plot top matches:
-        for s in sorted(h.keys(), reverse=True):
-            for tr in h[s]:
-                print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), self.pvals[tr], self.stats[tr])
-                if self.gc_col:
-                    self.tr2bars(tr)
-                    if self.plot_line:
-                        self.tr2cmp(tr)
-                else:
-                    self.tr2bars_gc_col(tr)
-                    if self.plot_line:
-                        self.tr2cmp_gc_col(tr)
-
+        # Print and plot top matches
+        for tr, v in top_matches:
+            print "%s\t%d\t\t%g\t\t%g" % (tr,len(self.ref_seq[tr]), self.pvals[tr], self.stats[tr])
+            if self.gc_col:
+                self.tr2bars(tr)
+                if self.plot_line:
+                    self.tr2cmp(tr)
+            else:
+                self.tr2bars_gc_col(tr)
+                if self.plot_line:
+                    self.tr2cmp_gc_col(tr)
 
     def tr2bars(self, tr):
         """ Plot coverage coverage for a transcript """
