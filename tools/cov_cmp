@@ -423,7 +423,7 @@ class CovComp:
         # Find the self.top_count^th p value:
         top_matches = sorted(self.pvals.items(), key=operator.itemgetter(1))[:self.top_count]
 
-        print("Transcript\tLength\t\tp-value\t\tp")
+        print("Transcript\tLength\t\tp-value\t\trho")
 
         # Print and plot the top matches
         for tr, v in top_matches:
