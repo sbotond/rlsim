@@ -98,6 +98,8 @@ class Report:
         plt.title(title)
         plt.xlabel(xl)
         plt.ylabel(yl)
+        plt.xlim(xmin=0.0)
+        plt.ylim(ymin=0.0)
         self.pages.savefig(fig)
         plt.clf()
         plt.close(fig)
