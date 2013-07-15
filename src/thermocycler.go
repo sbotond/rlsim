@@ -24,7 +24,7 @@
 * You should have received a copy of the GNU General Public
 * License along with this program. If not, see
 * <http://www.gnu.org/licenses/>.
-*/
+ */
 
 package main
 
@@ -62,7 +62,7 @@ func NewTechne(NrCycles int64, FixedEff float64, gcEffParam *EffParam, rawGcEffs
 	} else {
 
 		if rawGcEffs != nil {
-			// Got raw gc efficiencies: 
+			// Got raw gc efficiencies:
 			L.PrintfV("Using raw GC efficiencies with a minimum efficiency: %g", minRawGcEff)
 			tn.RawGcEffs = tn.ProcessRawGcEffs(rawGcEffs, minRawGcEff)
 			tn.hasRawEffs = true
@@ -73,7 +73,7 @@ func NewTechne(NrCycles int64, FixedEff float64, gcEffParam *EffParam, rawGcEffs
 		}
 
 		tn.LenEffParam = lenEffParam
-		// Precalculate scaling factors: 
+		// Precalculate scaling factors:
 		tn.LenScalers = CalcLenScalers(tg, lenEffParam)
 	}
 	tn.Target = tg
