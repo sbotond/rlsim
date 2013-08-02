@@ -162,30 +162,14 @@ class Fasta:
             records[s.name] = (str(s.seq)).upper()
         return records
 
+
 # Functions to turn sequences into logic vectors:
-def is_A(c):
-    if c == 'A':
-        return 1
-    return 0
-is_A_v = np.vectorize(is_A,otypes='')
+is_nt = lambda nt: lambda c: c == nt
 
-def is_T(c):
-    if c == 'T':
-        return 1
-    return 0
-is_T_v = np.vectorize(is_T,otypes='')
-
-def is_G(c):
-    if c == 'G':
-        return 1
-    return 0
-is_G_v = np.vectorize(is_G,otypes='')
-
-def is_C(c):
-    if c == 'C':
-        return 1
-    return 0
-is_C_v = np.vectorize(is_C,otypes='')
+is_A_v = np.vectorize(is_nt('A'), otypes='')
+is_T_v = np.vectorize(is_nt('T'), otypes='')
+is_G_v = np.vectorize(is_nt('G'), otypes='')
+is_C_v = np.vectorize(is_nt('C'), otypes='')
 
 class NumRef:
     def __init__(self, ref_seq):
