@@ -66,7 +66,7 @@ def parse_arguments():
     parser.add_argument('-q', metavar='min_qual', type=int, default=0, help='Minimum mapping quality (0).')
     parser.add_argument('-p', metavar='pickle_file', type=str, default=None, help='Results pickle file.')
     parser.add_argument('-v', action='store_true', default=False, help='Toggle verbose mode.')
-    parser.add_argument('-s', action='store_true', default=False, help='Assume reads are single end.')
+    parser.add_argument('-s', action='store_true', default=False, help='Assume single ended dataset.')
     args = parser.parse_args()
     return args
 

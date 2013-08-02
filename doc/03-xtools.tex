@@ -43,7 +43,7 @@ specified by the -d flag (default: \texttt{"0.5:g:(5e3,0.5) + 0.5:g:(5e4,1000)"}
 
 \begin{verbatim}
 usage: pb_plot [-h] [-f ref_fasta] [-r report_file] [-w winsize] [-i tr_list]
-               [-q min_qual] [-p pickle_file]
+               [-q min_qual] [-p pickle_file] [-s]
                [input file]
 
 Visualise sequence biases around fragment start/end (version 1.1).
@@ -59,6 +59,7 @@ optional arguments:
   -i tr_list      List of single isoform transcripts.
   -q min_qual     Minimum mapping quality.
   -p pickle_file  Results pickle file.
+  -s              Assume single ended dataset.
 \end{verbatim}
 
 This tool plots the counts of the bases (controlled by the \texttt{-w} flag) around the start and end of fragments defined by the paired-end reads in the input SAM file. It also reports the GC content distribution of the fragments. The input file must be sorted by read name!
@@ -69,11 +70,11 @@ See section \ref{sss:frag_methods} for example plots.
 \begin{verbatim}
 usage: cov_cmp [-h] -f ref_fasta [-g] [-t nr_top] [-c min_cov] [-i iso_list]
                [-l min_length] [-x] [-y] [-r report_file] [-q min_qual]
-               [-p pickle_file] [-v]
+               [-p pickle_file] [-v] [-s]
                input file input file
 
 Compare relative coverage trends between the *expressed* transcripts of two
-datasets (version 1.0).
+datasets (version 1.1).
 
 positional arguments:
   input file      Two sets of aligned *paired end* reads in SAM format.
@@ -92,6 +93,7 @@ optional arguments:
   -q min_qual     Minimum mapping quality (0).
   -p pickle_file  Results pickle file.
   -v              Toggle verbose mode.
+  -s              Assume single ended dataset.
 \end{verbatim}
 
 The \texttt{cov\_cmp} tool takes two datasests mapped on the same transcriptome and reports the rank correlation of transcript level fragment counts and the per-transcript rank correlation of the \emph{fragment} count vectors:

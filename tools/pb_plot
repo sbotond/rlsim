@@ -58,7 +58,7 @@ def parse_arguments():
     parser.add_argument('-i', metavar='tr_list', type=str, default=None, help='List of single isoform transcripts.')
     parser.add_argument('-q', metavar='min_qual', type=int, default=10, help='Minimum mapping quality.')
     parser.add_argument('-p', metavar='pickle_file', type=str, default="pb_plot.pk", help='Results pickle file.')
-    parser.add_argument('-s', action='store_true', default=False, help='Assume reads are single ended.')
+    parser.add_argument('-s', action='store_true', default=False, help='Assume single ended dataset.')
     args            = parser.parse_args()
 
     if args.f == "":

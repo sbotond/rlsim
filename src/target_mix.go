@@ -24,7 +24,7 @@
 * You should have received a copy of the GNU General Public
 * License along with this program. If not, see
 * <http://www.gnu.org/licenses/>.
-*/
+ */
 
 package main
 
@@ -104,6 +104,9 @@ func parseTargetMixString(s string) *TargetMix {
 			L.Fatal("Empty target mixture string!")
 		}
 		comp, weight := parseTargetMixComponent(str)
+		if comp.High < comp.Low {
+			L.Fatal("Maximum fragment size is smaller than minimum fragment size for component \"" + str + "\"!")
+		}
 		mix.Components[comp] = weight
 	}
 

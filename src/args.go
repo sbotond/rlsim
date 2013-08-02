@@ -24,7 +24,7 @@
 * You should have received a copy of the GNU General Public
 * License along with this program. If not, see
 * <http://www.gnu.org/licenses/>.
-*/
+ */
 
 package main
 
@@ -237,7 +237,7 @@ For more details consult the package manual at:
 	// Set input files
 	a.InputFiles = flag.Args()
 
-	// Parse raw parameter file if present: 
+	// Parse raw parameter file if present:
 	if a.RawParamsFile != "" {
 		rp := DecodeRawParams(a.RawParamsFile)
 		if a.ReqFrags == 0 {

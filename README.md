@@ -276,8 +276,7 @@ Quick reference
 ### `rlsim`
 
 ```
-    Simulate RNA-seq library preparation with priming biases, PCR biases and size selection 
-    (version: 1.0).
+    Simulate RNA-seq library preparation with priming biases, PCR biases and size selection (version: 1.1).
 
     Usage:
             rlsim [arguments] [transcriptome fasta files (optional)]
@@ -413,7 +412,7 @@ Quick reference
 
 ```
     usage: pb_plot [-h] [-f ref_fasta] [-r report_file] [-w winsize] [-i tr_list]
-                   [-q min_qual] [-p pickle_file]
+                   [-q min_qual] [-p pickle_file] [-s]
                    [input file]
 
     Visualise sequence biases around fragment start/end (version 1.1).
@@ -429,6 +428,7 @@ Quick reference
       -i tr_list      List of single isoform transcripts.
       -q min_qual     Minimum mapping quality.
       -p pickle_file  Results pickle file.
+      -s              Assume single ended dataset.
 ```
 
 ### `cov_cmp`
@@ -436,7 +436,7 @@ Quick reference
 ```
     usage: cov_cmp [-h] -f ref_fasta [-g] [-t nr_top] [-c min_cov] [-i iso_list]
                    [-l min_length] [-x] [-y] [-r report_file] [-q min_qual]
-                   [-p pickle_file] [-v]
+                   [-p pickle_file] [-v] [-s]
                    input file input file
 
     Compare relative coverage trends between the *expressed* transcripts of two
@@ -459,6 +459,8 @@ Quick reference
       -q min_qual     Minimum mapping quality (0).
       -p pickle_file  Results pickle file.
       -v              Toggle verbose mode.
+      -s              Assume single ended dataset.
+
 ```
 
 ### `plot_cov`
