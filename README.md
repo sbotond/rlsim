@@ -208,7 +208,7 @@ Installing the latest release
 The release tarballs can be obtained from the [releases](https://github.com/sbotond/rlsim/tree/master/releases) directory:
 
 ```
-    wget https://github.com/sbotond/rlsim/tree/master/releases/rlsim-latest_amd64.tar.gz
+    wget https://github.com/sbotond/rlsim/blob/master/releases/rlsim-latest_amd64.tar.gz?raw=true t.tgz -O rlsim-latest_amd64.tar.gz
 ```
 
 The unpacked release directory contains the following files:
