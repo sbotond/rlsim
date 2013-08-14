@@ -35,6 +35,16 @@ rprof: rlsim
 vprof:
 	go tool pprof ./rlsim prof.out
 
+# Targets for simple comparison of CPU usage:
+NR_TIME_FRAGS	=2000000
+TIME_EXPR_MUL	=10
+TIME_CORES		=2
+gtime: rlsim
+	(/usr/bin/time -f "%U" ./rlsim -si 7567 -n $(NR_TIME_FRAGS) -m $(TIME_EXPR_MUL) -t $(TIME_CORES) -f "after_prim_double" ./test/basic/test_transcripts_full.fas > /dev/null) 2>>gtimes.tab 
+gcctime: rlsim.gcc
+	(/usr/bin/time -f "%U" ./rlsim.gcc -si 7567 -n $(NR_TIME_FRAGS) -m $(TIME_EXPR_MUL) -t $(TIME_CORES) -f "after_prim_double" ./test/basic/test_transcripts_full.fas > /dev/null) 2>>gcctimes.tab
+times: gtime gcctime
+
 # Main target:
 TARG=rlsim
 GOFILES=\
@@ -73,5 +83,5 @@ tools:
 	@cd ../tools;make; cd ..
 
 clean:
-	rm -f $(TARG)
+	rm -f $(TARG) $(TARG).gcc
 	@cd ../tools;make clean; cd ..
