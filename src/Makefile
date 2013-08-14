@@ -36,8 +36,8 @@ vprof:
 	go tool pprof ./rlsim prof.out
 
 # Targets for simple comparison of CPU usage:
-NR_TIME_FRAGS	=2000000
-TIME_EXPR_MUL	=10
+NR_TIME_FRAGS	=1000000
+TIME_EXPR_MUL	=1.0
 TIME_CORES		=2
 gtime: rlsim
 	(/usr/bin/time -f "%U" ./rlsim -si 7567 -n $(NR_TIME_FRAGS) -m $(TIME_EXPR_MUL) -t $(TIME_CORES) -f "after_prim_double" ./test/basic/test_transcripts_full.fas > /dev/null) 2>>gtimes.tab 
@@ -75,7 +75,7 @@ rlsim: $(GOFILES)
 	go build -o $(TARG) $(GOFILES)
 
 # Build rlsim.gcc using gccgo:
-GCC_FLAGS	= -static-libgcc -O3 -march=native -funroll-loops -fomit-frame-pointer
+GCC_FLAGS	=  -static-libgo -static-libgcc -O3 -march=native -funroll-loops -fomit-frame-pointer
 gccbuild:
 	go build -compiler gccgo -gccgoflags '$(GCC_FLAGS)' -o $(TARG).gcc $(GOFILES)
 
