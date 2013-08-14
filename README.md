@@ -276,7 +276,7 @@ Quick reference
 ### `rlsim`
 
 ```
-    Simulate RNA-seq library preparation with priming biases, PCR biases and size selection (version: 1.1).
+    Simulate RNA-seq library preparation with priming biases, PCR biases and size selection (version: 1.2).
 
     Usage:
             rlsim [arguments] [transcriptome fasta files (optional)]
