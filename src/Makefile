@@ -64,6 +64,11 @@ GOFILES=\
 rlsim: $(GOFILES)
 	go build -o $(TARG) $(GOFILES)
 
+# Build rlsim.gcc using gccgo:
+GCC_FLAGS	= -static-libgcc -O3 -march=native -funroll-loops -fomit-frame-pointer
+gccbuild:
+	go build -compiler gccgo -gccgoflags '$(GCC_FLAGS)' -o $(TARG).gcc $(GOFILES)
+
 tools:
 	@cd ../tools;make; cd ..
 
