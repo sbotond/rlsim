@@ -29,7 +29,7 @@ st: rlsim
 	$(TOOLS)/plot_rlsim_report
 # Run big test with profiling:
 rprof: rlsim
-	./rlsim -v -n 3000000 -t 4 -f "after_prim_double" -prof prof.out ./test/basic/test_transcripts_full.fas > /dev/null
+	./rlsim -si 7567 -v -n 3000000 -t 4 -f "after_prim_double" -prof prof.out ./test/basic/test_transcripts_full.fas > /dev/null
 	$(TOOLS)/plot_rlsim_report
 # View profiling results:
 vprof:
