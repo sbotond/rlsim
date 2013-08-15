@@ -36,7 +36,7 @@ vprof:
 	go tool pprof ./rlsim prof.out
 
 # Targets for simple comparison of CPU usage:
-NR_TIME_FRAGS	=1000000
+NR_TIME_FRAGS	=1500000
 TIME_EXPR_MUL	=1.0
 TIME_CORES		=2
 gtime: rlsim
