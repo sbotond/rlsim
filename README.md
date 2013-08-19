@@ -281,7 +281,7 @@ A tarball can be built by issuing:
 
 [Benchmarks indicate](http://bit.ly/160TBUn) that the `gccgo` build is faster on average, however the difference in runtime is not substantial.
 
-** Please note that the experimental `gccgo` builds are not supported. Feel free to use them, but please do not submit bug reports if anything goes wrong. ** 
+__Please note that the experimental `gccgo` builds are not supported. Feel free to use them, but please do not submit bug reports if anything goes wrong.__
 
 Quick reference
 ---------------
