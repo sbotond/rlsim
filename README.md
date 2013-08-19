@@ -245,7 +245,7 @@ Build dependencies:
 
 -   The package is built using `make` in a standard `Linux` environment.
 
--   Building the rlsim tool requires the compiler which can be installed
+-   Building the rlsim tool requires the `Go` compiler which can be installed
     as described on the projects [website](http://golang.org/doc/install).
 
 -   A standard `LaTeX` installation with `pdflatex` has to be present in
@@ -268,6 +268,20 @@ A tarball can be built by issuing:
 ```
    make release
 ```
+
+## Experimental builds with gccgo
+
+`rlsim` can be compiled with the recent version (>=4.7.2) of the `gccgo` compiler:
+
+- Install the gc `Go` compiler suite on the projects [website](http://golang.org/doc/install), as the build process uses the `go` tool.
+
+- Install gccgo as described [here](http://golang.org/doc/install/gccgo), or through your [package manager](http://packages.ubuntu.com/search?keywords=gccgo).
+
+- Issue `make gccbuild` under `src/'.
+
+[Benchmarks indicate](http://bit.ly/160TBUn) that the `gccgo` build is faster on average, however the difference in runtime is not substantial.
+
+** Please note that the experimental `gccgo` builds are not supported. Feel free to use them, but please do not submit bug reports if anything goes wrong. ** 
 
 Quick reference
 ---------------
