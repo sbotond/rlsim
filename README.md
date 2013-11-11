@@ -291,58 +291,6 @@ Quick reference
 ### `rlsim`
 
 ```
-    Simulate RNA-seq library preparation with priming biases, PCR biases and size selection (version: 1.2).
-
-    Usage:
-            rlsim [arguments] [transcriptome fasta files (optional)]
-
-    Optional arguments:
-                    argument                    type    default  
-            -n      requested fragments         int     
-            -d      fragment size distribution  string  [check source]
-            -f      fragmentation method        string  "after_prim_double"
-            -b      strand bias                 float   0.5
-            -c      PCR cycles                  int     11
-            -p      priming bias parameter      float   5.0
-            -k      primer length               int     6
-            -a      poly(A) tail size dist.     string  [check source]
-            -flg    fragment loss probability   float   0.0
-            -m      expression level multiplier float   1.0
-            -e      fixed PCR efficiency        float   0.0
-            -eg     GC efficiency parameters 
-                    as "(shape, min, max)":
-                        shape                   float   8.0
-                        min                     float   0.8
-                        max                     float   0.95
-            -el     length efficiency parameters 
-                    as "(shape, min, max)":
-                        shape                   float   0.0
-                        min                     float   1.0
-                        max                     float   1.0
-            -j      raw parameter file          string  
-                    superseeds -d, -c, -eg
-            -jm     minimum raw gc efficiency   float   0.0
-            -r      report file                 string  "rlsim_report.json"
-            -t      number of cores to use      int     4
-            -g      keep fragments in memory    bool    false
-            -si     initial random seed         int     from UTC time
-            -sp     pcr random seed             int     auto
-            -ss     sampling random seed        int     auto
-            -gobdir fragment directory          string  "rlsim_gob_$PID"
-            -v      toggle verbose mode         bool    false
-            -h      print usage and exit        bool    false
-            -V      print version and exit      bool    false
-            -prof   write CPU profiling info    string  ""
-            -gcfreq trigger garbage collection  int     100
-                    after this many transcripts
-            -randt  generate RNG test files     bool    false
-
-    Examples:
-            rlsim -n 2000000 transcripts.fa
-            cat transcripts.fa | rlsim -n 2000000
-
-    For more details consult the package manual at:
-            https://github.com/sbotond/rlsim/tree/master/doc/rlsim_manual.pdf
 ```
 
 ### `effest`
