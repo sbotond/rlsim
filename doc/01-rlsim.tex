@@ -4,7 +4,7 @@
 \label{ss:qrlsim}
 
 \begin{verbatim}
-Simulate RNA-seq library preparation with priming biases, PCR biases and size selection (version: 1.2).
+Simulate RNA-seq library preparation with priming biases, PCR biases and size selection (version: 1.3).
 
 Usage:
         rlsim [arguments] [transcriptome fasta files (optional)]
@@ -12,7 +12,7 @@ Usage:
 Optional arguments:
                 argument                    type    default  
         -n      requested fragments         int     
-        -d      fragment size distribution  string  [check source]
+        -d      fragment size distribution  string  "1.0:sn:(189, 24, -1.09975, 76, 294)" 
         -f      fragmentation method        string  "after_prim_double"
         -b      strand bias                 float   0.5
         -c      PCR cycles                  int     11
@@ -23,10 +23,7 @@ Optional arguments:
         -m      expression level multiplier float   1.0
         -e      fixed PCR efficiency        float   0.0
         -eg     GC efficiency parameters 
-                as "(shape, min, max)":
-                    shape                   float   8.0
-                    min                     float   0.8
-                    max                     float   0.95
+                as "(shape, min, max)":     raw from SRR521457
         -el     length efficiency parameters 
                 as "(shape, min, max)":
                     shape                   float   0.0
