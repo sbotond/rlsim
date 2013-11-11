@@ -220,9 +220,7 @@ func validateMixComp(m *MixComp, s string) {
 	if m.Scale < 0 {
 		L.Fatalf("Scale parameter is negative in mixture string: %s", s)
 	}
-	if m.Shape < 0 {
-		L.Fatalf("Shape parameter is negative in mixture string: %s", s)
-	}
+
 	if m.Low < 0 {
 		L.Fatalf("Lower boundary parameter is negative in mixture string: %s", s)
 	}
