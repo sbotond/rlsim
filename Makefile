@@ -1,4 +1,4 @@
-VERSION	= 1.2
+VERSION	= 1.3
 RD		= rlsim-$(VERSION)_amd64
 all: rlsim docs
 
