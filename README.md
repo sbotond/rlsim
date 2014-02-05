@@ -136,7 +136,7 @@ package source tree:
 
 -   Estimate parameters from SAM file sorted by read name using (verbose
     mode):
-``
+```
         $ ../tools/effest -v -f ../tools/test/ref.fas ../tools/test/aln1.sam 
 ```
 
