@@ -489,6 +489,7 @@ Quick reference
       -b bam        Position sorted and indexed BAM file.
       -o outfile    Output PDF (plot_cov.pdf).
 ```
+            
 
 [![githalytics.com alpha](https://cruel-carlota.pagodabox.com/a7401ff83389dacf5bf79399ba749f32 "githalytics.com")](http://githalytics.com/sbotond/rlsim)
 
